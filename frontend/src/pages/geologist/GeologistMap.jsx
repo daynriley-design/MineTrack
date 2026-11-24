@@ -1,12 +1,39 @@
-import { useState } from 'react';
-import { Map as MapIcon, Maximize2, Layers, Download, Printer, Share2, ZoomIn, ZoomOut, Rotate3d, Ruler } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Map as MapIcon, Maximize2, Layers, Download, Printer, Share2, ZoomIn, ZoomOut, Rotate3d, Ruler, Search, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { pegsAPI } from '../../api';
 
 export default function GeologistMap() {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [measureMode, setMeasureMode] = useState(false);
+  const [allPegs, setAllPegs] = useState([]);
+  const [query, setQuery] = useState('');
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    pegsAPI.list().then(res => {
+      const items = Array.isArray(res.data) ? res.data : res.data?.items || [];
+      setAllPegs(items);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setShowResults(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const results = query.trim().length > 0
+    ? allPegs.filter(p =>
+        (p.peg_id || '').toLowerCase().includes(query.toLowerCase()) ||
+        (p.zone || '').toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 8)
+    : [];
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 2.5));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
@@ -19,11 +46,48 @@ export default function GeologistMap() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', height: '100%' }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 style={{ color: 'var(--color-white)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <MapIcon size={28} color="var(--color-gold)" />
           CARTOGRAPHIE 3D - MPAMA North
         </h2>
+
+        <div ref={searchRef} style={{ position: 'relative', flex: '1 1 260px', maxWidth: '340px' }}>
+          <Search size={16} color="var(--color-stone)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setShowResults(true); }}
+            onFocus={() => setShowResults(true)}
+            placeholder="Rechercher un PEG ou chantier..."
+            className="premium-input"
+            style={{ width: '100%', paddingLeft: '2.4rem' }}
+          />
+          {query && (
+            <button type="button" onClick={() => { setQuery(''); setShowResults(false); }} style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--color-stone)', cursor: 'pointer' }}>
+              <X size={14} />
+            </button>
+          )}
+          {showResults && query.trim() && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-rock-2)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-md)', zIndex: 50, maxHeight: '260px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(17,18,20,0.06)' }}>
+              {results.length === 0 ? (
+                <div style={{ padding: '0.75rem 1rem', color: 'var(--color-stone)', fontSize: '0.85rem' }}>Aucun résultat</div>
+              ) : results.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => { toast(`PEG ${p.peg_id} — zone ${p.zone || '—'}, statut ${p.status}`, 'info'); setShowResults(false); }}
+                  style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--color-rock-3)', display: 'flex', justifyContent: 'space-between' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(17,18,20,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ color: 'var(--color-white)', fontFamily: 'monospace', fontWeight: 700 }}>{p.peg_id}</span>
+                  <span style={{ color: 'var(--color-stone)', fontSize: '0.8rem' }}>{p.zone || '—'} · {p.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button className="premium-button secondary"><Download size={16}/> EXPORTER</button>
           <button className="premium-button secondary"><Printer size={16}/> IMPRIMER</button>
@@ -75,7 +139,7 @@ export default function GeologistMap() {
               </defs>
 
               {/* Grille de fond isométrique */}
-              <g stroke="rgba(255,255,255,0.05)" strokeWidth="1">
+              <g stroke="rgba(17,18,20,0.05)" strokeWidth="1">
                 {[...Array(20)].map((_, i) => (
                   <line key={`h${i}`} x1="0" y1={i * 40} x2="800" y2={i * 40 + 200} />
                 ))}
@@ -120,7 +184,7 @@ export default function GeologistMap() {
             </svg>
           </div>
 
-          <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.5)', display: 'flex', gap: '2rem', borderTop: '1px solid var(--color-rock-3)' }}>
+          <div style={{ padding: '1rem', background: 'rgba(17,18,20,0.06)', display: 'flex', gap: '2rem', borderTop: '1px solid var(--color-rock-3)' }}>
             <span style={{ color: 'var(--color-stone)', fontSize: '0.85rem' }}>▲ Pegmatite active</span>
             <span style={{ color: 'var(--color-stone)', fontSize: '0.85rem' }}>■ Zone exploitée</span>
             <span style={{ color: 'var(--color-stone)', fontSize: '0.85rem' }}>⬡ Échantillon</span>

@@ -57,7 +57,7 @@ Le backend utilise **Python** et le framework web **Flask**.
 *   **La fonction `init_db()`** : 
     1.  `conn = sqlite3.connect('minetrack.db')` : Si le fichier `minetrack.db` n'existe pas, il le crée. C'est notre disque dur de données.
     2.  `c.execute('CREATE TABLE...')` : Il crée des "tableaux" Excel virtuels. Il crée une table `users` (colonnes: email, password, role), une table `pegs` (zones d'exploration), une table `production`, et une table `incidents`.
-    3.  **Les fausses données (Mock Data)** : Le fichier regarde si la table `users` est vide. Si oui, il ajoute un compte de test (`INSERT INTO users...`) avec l'email `daynriley@gmail.com` et le mot de passe `Marie_tte637`. Il fait de même pour générer de fausses données de production pour que vos graphiques ne soient pas vides.
+    3.  **Les fausses données (Mock Data)** : Le fichier regarde si la table `users` est vide. Les comptes de démonstration (un par rôle, ex. `admin@minetrack.com`) sont créés par `backend/create_accounts.py` — voir le tableau des comptes dans le README. Il fait de même pour générer de fausses données de production pour que vos graphiques ne soient pas vides.
     4.  `conn.commit()` : Il sauvegarde tout.
 
 ### Fichier 2 : `backend/server.py`

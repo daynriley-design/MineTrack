@@ -19,7 +19,7 @@ export default function MinerProduction() {
         <h3 style={{ margin: 0, color: 'var(--color-white)', fontWeight: 700 }}>Saisie Production</h3>
       </div>
 
-      <div style={{ background: 'rgba(41, 37, 36, 0.4)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.5rem' }}>
+      <div style={{ background: '#FFFFFF', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.5rem' }}>
         <form onSubmit={handleSubmit}>
           
           <div className="form-group">
@@ -65,7 +65,7 @@ export default function MinerProduction() {
             { id: '2', engin: 'DT-402', type: 'Stérile (Waste)', tons: '30.0', time: '11:15' },
             { id: '3', engin: 'DT-405', type: 'Minerai Haute Teneur', tons: '31.8', time: '09:45' }
           ].map(record => (
-            <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', borderLeft: '3px solid var(--color-ore)' }}>
+            <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(17,18,20,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', borderLeft: '3px solid var(--color-ore)' }}>
               <div>
                 <strong style={{ color: 'var(--color-white)', display: 'block' }}>{record.engin}</strong>
                 <span style={{ color: 'var(--color-stone)', fontSize: '0.8rem' }}>{record.type} | {record.tons}t</span>

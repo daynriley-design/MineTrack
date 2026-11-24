@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { enqueueRequest } from './utils/offlineQueue';
 
 const api = axios.create({
   baseURL: '/api',
@@ -6,11 +7,36 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const MUTATING_METHODS = ['post', 'put', 'patch', 'delete'];
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Ne pas forcer un rechargement complet de la page pour éviter une boucle infinie
-    // lorsque le composant App ou AuthContext vérifie l'état de la session au démarrage.
+  async (error) => {
+    const config = error.config || {};
+    const method = (config.method || '').toLowerCase();
+    // Pas de réponse du tout = vraie coupure réseau (pas une erreur 4xx/5xx du serveur).
+    const isNetworkFailure = !error.response;
+
+    const isAuthEndpoint = (config.url || '').includes('/auth/');
+
+    if (isNetworkFailure && MUTATING_METHODS.includes(method) && !isAuthEndpoint) {
+      try {
+        const data = config.data ? JSON.parse(config.data) : {};
+        await enqueueRequest({ method, url: config.url, data });
+        window.dispatchEvent(new CustomEvent('minetrack:offline-queued'));
+        // On résout comme si la requête avait réussi : l'écran ne bloque pas le mineur/géologue
+        // sur le terrain. La synchronisation réelle se fait dès que la connexion revient.
+        return Promise.resolve({
+          data: { ...data, id: `offline-${Date.now()}`, _offline_queued: true },
+          status: 202,
+          statusText: 'Queued Offline',
+          headers: {},
+          config,
+        });
+      } catch {
+        return Promise.reject(error);
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -68,6 +94,9 @@ export const incidentsAPI      = makeModule('incidents');
 export const hseChecklistsAPI  = makeModule('hse-checklists');
 export const equipmentPannesAPI= makeModule('equipment-pannes');
 export const miniReportsAPI    = makeModule('mini-reports');
+export const ptoAPI            = makeModule('pto');
+export const faceExaminationsAPI = makeModule('face-examinations');
+export const groundSupportAPI  = makeModule('ground-support');
 
 export const supervisorAPI = {
   alerts: () => api.get('/supervisor/alerts'),

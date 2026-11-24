@@ -71,6 +71,8 @@ class BlastingCreate(BaseModel):
     date: Optional[str] = None
     status: str = "planned"
     result: Optional[str] = None
+    advance_after_blast_m: Optional[float] = None
+    reentry_minutes: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -204,6 +206,7 @@ class EquipmentPanneCreate(BaseModel):
     reported_date: str
     reported_by: Optional[str] = None
     status: str = "open"
+    photo: Optional[str] = None
 
 class MiniReportCreate(BaseModel):
     shift: str
@@ -214,4 +217,38 @@ class MiniReportCreate(BaseModel):
     production_summary: str
     issues_encountered: str
     submitted_by: Optional[str] = None
+
+
+class PtoCreate(BaseModel):
+    employee_id: str
+    employee_name: str
+    date: str
+    leave_type: str = "conge"
+    days: float = 1
+    status: str = "pending"
+    notes: Optional[str] = None
+
+
+class FaceExaminationCreate(BaseModel):
+    peg_id: str
+    date: str
+    examiner: Optional[str] = None
+    ground_condition: str = "safe"
+    hazards_observed: Optional[str] = None
+    ventilation_ok: int = 1
+    gas_readings: Optional[str] = None
+    action_required: Optional[str] = None
+    status: str = "cleared"
+    photo: Optional[str] = None
+
+
+class GroundSupportCreate(BaseModel):
+    peg_id: str
+    support_type: str
+    quantity: float
+    date_installed: str
+    state: str = "good"
+    shotcrete_m3: Optional[float] = None
+    concrete_m3: Optional[float] = None
+    notes: Optional[str] = None
 

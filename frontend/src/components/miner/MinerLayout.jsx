@@ -1,6 +1,8 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Pickaxe, LayoutDashboard, MapPin, ShieldCheck, AlertTriangle, Truck, Wrench, FileText, LogOut, UserCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import OfflineBanner from '../OfflineBanner';
+import LanguageSwitcher from '../LanguageSwitcher';
 
 export default function MinerLayout() {
   const { logout, user } = useAuth();
@@ -18,7 +20,7 @@ export default function MinerLayout() {
     display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem',
     borderRadius: 'var(--radius-md)',
     color: isActive(path) ? 'var(--color-white)' : 'var(--color-ash)',
-    background: isActive(path) ? 'rgba(255,255,255,0.05)' : 'transparent',
+    background: isActive(path) ? 'rgba(17,18,20,0.05)' : 'transparent',
     textDecoration: 'none', fontWeight: 600, transition: 'all 0.2s ease',
     borderLeft: isActive(path) ? `3px solid ${colorVar}` : '3px solid transparent'
   });
@@ -91,6 +93,7 @@ export default function MinerLayout() {
 
         {/* User footer */}
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-rock-3)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <LanguageSwitcher style={{ width: '100%' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(249,115,22,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <UserCircle size={20} color="var(--color-ore)" />
@@ -118,6 +121,7 @@ export default function MinerLayout() {
 
       {/* Main Content */}
       <main style={{ flex: 1, padding: '2rem 3rem', overflowY: 'auto' }}>
+        <OfflineBanner />
         <Outlet />
       </main>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Layers, AlertTriangle, CheckCircle, Wrench, RotateCcw, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { MapPin, Layers, RotateCcw, ZoomIn, ZoomOut, Download, Search, X } from 'lucide-react';
 
 const PEGS = [
   { id: 'PEG-10L-XC5SS', pct: 67, x: 28, y: 22, status: 'alert', shape: '▲' },
@@ -29,11 +29,12 @@ const LEGEND = [
 export default function SupervisorMap() {
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
   const filteredPegs = PEGS.filter(p => {
-    if (filter === 'all') return true;
-    if (filter === 'alerts') return p.status === 'alert';
-    if (filter === 'done') return p.status === 'done';
+    if (filter === 'alerts' && p.status !== 'alert') return false;
+    if (filter === 'done' && p.status !== 'done') return false;
+    if (query.trim() && !p.id.toLowerCase().includes(query.toLowerCase())) return false;
     return true;
   });
 
@@ -52,6 +53,24 @@ export default function SupervisorMap() {
           </div>
         </div>
 
+        {/* Recherche rapide */}
+        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: '280px' }}>
+          <Search size={15} color="var(--color-stone)" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un PEG..."
+            className="premium-input"
+            style={{ width: '100%', paddingLeft: '2.2rem' }}
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--color-stone)', cursor: 'pointer' }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
         {/* Filters */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {[
@@ -59,7 +78,7 @@ export default function SupervisorMap() {
             { key: 'alerts', label: '🔴 Alertes' },
             { key: 'done', label: '✅ Terminés' },
           ].map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)} style={{ padding: '0.4rem 0.85rem', background: filter === f.key ? 'var(--color-ore)' : 'rgba(255,255,255,0.05)', color: filter === f.key ? 'white' : 'var(--color-ash)', border: `1px solid ${filter === f.key ? 'var(--color-ore)' : 'var(--color-rock-4)'}`, borderRadius: 'var(--radius-md)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+            <button key={f.key} onClick={() => setFilter(f.key)} style={{ padding: '0.4rem 0.85rem', background: filter === f.key ? 'var(--color-ore)' : 'rgba(17,18,20,0.05)', color: filter === f.key ? 'white' : 'var(--color-ash)', border: `1px solid ${filter === f.key ? 'var(--color-ore)' : 'var(--color-rock-4)'}`, borderRadius: 'var(--radius-md)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
               {f.label}
             </button>
           ))}
@@ -150,7 +169,7 @@ export default function SupervisorMap() {
               { icon: <RotateCcw size={16} />, title: 'Centrer' },
               { icon: <Download size={16} />, title: 'Exporter' },
             ].map((btn, i) => (
-              <button key={i} title={btn.title} style={{ width: '32px', height: '32px', background: 'rgba(41,37,36,0.9)', border: '1px solid var(--color-rock-4)', borderRadius: '6px', color: 'var(--color-chalk)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <button key={i} title={btn.title} style={{ width: '32px', height: '32px', background: '#FFFFFF', border: '1px solid var(--color-rock-4)', borderRadius: '6px', color: 'var(--color-chalk)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                 {btn.icon}
               </button>
             ))}
@@ -161,7 +180,7 @@ export default function SupervisorMap() {
             const peg = PEGS.find(p => p.id === selected);
             const st = statusStyle[peg.status];
             return (
-              <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', background: 'rgba(28,25,23,0.95)', border: `1px solid ${st.color}50`, borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem', minWidth: '220px', backdropFilter: 'blur(10px)' }}>
+              <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', background: '#F7F8FA', border: `1px solid ${st.color}50`, borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem', minWidth: '220px', backdropFilter: 'blur(10px)' }}>
                 <div style={{ color: st.color, fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.35rem' }}>{peg.id}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--color-chalk)' }}>
                   {peg.pct !== null && <><span style={{ color: 'var(--color-stone)' }}>Avancement</span><span style={{ fontFamily: 'monospace', fontWeight: 700, color: st.color }}>{peg.pct}%</span></>}
@@ -176,7 +195,7 @@ export default function SupervisorMap() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           
           {/* Legend */}
-          <div style={{ background: 'rgba(41,37,36,0.5)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.25rem' }}>
+          <div style={{ background: '#FFFFFF', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
               <Layers size={14} color="var(--color-stone)" />
               <h4 style={{ margin: 0, color: 'var(--color-chalk)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Légende</h4>
@@ -192,18 +211,18 @@ export default function SupervisorMap() {
           </div>
 
           {/* PEG List */}
-          <div style={{ background: 'rgba(41,37,36,0.5)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', flex: 1 }}>
+          <div style={{ background: '#FFFFFF', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', flex: 1 }}>
             <h4 style={{ margin: '0 0 0.85rem 0', color: 'var(--color-chalk)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>PEG Actifs</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {PEGS.filter(p => p.pct !== null).map(peg => {
                 const st = statusStyle[peg.status];
                 return (
-                  <div key={peg.id} onClick={() => setSelected(peg.id === selected ? null : peg.id)} style={{ cursor: 'pointer', padding: '0.6rem 0.75rem', background: selected === peg.id ? `${st.color}15` : 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)', border: `1px solid ${selected === peg.id ? st.color + '50' : 'transparent'}`, transition: 'all 0.2s ease' }}>
+                  <div key={peg.id} onClick={() => setSelected(peg.id === selected ? null : peg.id)} style={{ cursor: 'pointer', padding: '0.6rem 0.75rem', background: selected === peg.id ? `${st.color}15` : 'rgba(17,18,20,0.06)', borderRadius: 'var(--radius-md)', border: `1px solid ${selected === peg.id ? st.color + '50' : 'transparent'}`, transition: 'all 0.2s ease' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
                       <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: st.color }}>{peg.id}</span>
                       <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: st.color, fontWeight: 700 }}>{peg.pct}%</span>
                     </div>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '3px', height: '5px', overflow: 'hidden' }}>
+                    <div style={{ background: 'rgba(17,18,20,0.06)', borderRadius: '3px', height: '5px', overflow: 'hidden' }}>
                       <div style={{ width: `${peg.pct}%`, height: '100%', background: st.color, borderRadius: '3px' }} />
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { FlaskConical, Map, AlertTriangle, Activity, Hammer, FileText, ChevronRight, PlusCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
@@ -6,13 +6,12 @@ import { useToast } from '../../contexts/ToastContext';
 export default function GeologistDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [date, setDate] = useState('');
-
-  useEffect(() => {
+  // Date/heure d'ouverture de l'ecran, calculee une seule fois.
+  const [date] = useState(() => {
     const d = new Date();
-    setDate(d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + 
-            d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-  }, []);
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+      d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  });
 
   const kpis = [
     { label: 'PEG ACTIFS', value: '8', icon: Activity, color: 'var(--color-info)' },
@@ -182,7 +181,7 @@ export default function GeologistDashboard() {
                   </div>
                   <button 
                     onClick={() => { toast(`Détails de l'échantillon ${samp.ref}`, 'info'); navigate('/geologist/samples'); }}
-                    style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--color-info)', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                    style={{ background: 'rgba(17,18,20,0.05)', border: 'none', color: 'var(--color-info)', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
                   >
                     📋 Voir
                   </button>

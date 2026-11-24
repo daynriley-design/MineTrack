@@ -9,7 +9,6 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import aiosqlite
-from auth_utils import hash_password
 
 DB_PATH = Path(__file__).parent / "minetrack.db"
 
@@ -23,26 +22,14 @@ async def seed_data():
     print("🌱 Seeding Minetrack SQLite database (RDC Context)...")
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Clear all tables
-        tables = ["users", "pegs", "work_progress", "drilling", "blasting",
-                  "production", "equipment", "labor", "hse", "geology", "support", "financial"]
+        # Clear demo data tables (users are managed separately by create_accounts.py)
+        tables = ["pegs", "work_progress", "drilling", "blasting",
+                  "production", "equipment", "labor", "hse", "geology", "support", "financial",
+                  "incidents", "equipment_pannes", "mini_reports"]
         for t in tables:
             await db.execute(f"DELETE FROM {t}")
         await db.commit()
         print("   ✅ Tables cleared")
-
-        # Users
-        users = [
-            (new_id(), "daynriley@gmail.com", hash_password("Marie_tte637"), "Admin Système", "admin"),
-            (new_id(), "superviseur@minetrack.com", hash_password("super123"), "Jean-Baptiste Ilunga", "supervisor"),
-            (new_id(), "operateur@minetrack.com", hash_password("oper123"), "Moussa Kasongo", "operator"),
-            (new_id(), "geologue@minetrack.com", hash_password("geo123"), "Dr. Amina Mukendi", "geologist"),
-        ]
-        await db.executemany(
-            "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [(u[0], u[1], u[2], u[3], u[4], now()) for u in users]
-        )
-        print("   ✅ Users seeded")
 
         zones = ["Kolwezi - Fosse Nord", "Kipushi - Zone Est", "Tenke - Sud", "Ruashi - Ouest"]
         statuses = ["active", "active", "active", "completed", "pending"]
@@ -275,8 +262,33 @@ async def seed_data():
 
         await db.commit()
 
+        # Incidents
+        incidents_data = [
+            (new_id(), "Hémorragie suite à accident LV42", "Opérateur KUBUYA-DAVID blessé par véhicule LV42 au niveau 10L-XC5SS. Transporté à l'hôpital de Kolwezi.", "critical", "10L-XC5SS — MPAMA North", datetime.now().strftime("%Y-%m-%d"), "KUBUYA-DAVID", now(), "daynriley@gmail.com"),
+            (new_id(), "Panne hydraulique haveuse S1D 05", "Défaillance hydraulique majeure sur la foreuse S1D 05. Arrêt machine. Niveau 2 Galerie Principale.", "warning", "Niveau 2, Galerie Principale", (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d"), "Équipe Maintenance Bêta", now(), "daynriley@gmail.com"),
+            (new_id(), "Stock critique — Dynamite seuil atteint", "Seuil minimal de dynamite atteint en entrepôt. Réapprovisionnement requis immédiatement.", "info", "Entrepôt Explosifs — Surface", (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d"), "Gestionnaire Stocks", now(), "daynriley@gmail.com"),
+        ]
+        await db.executemany(
+            "INSERT INTO incidents (id, title, description, severity, location, date, reported_by, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+            incidents_data
+        )
+        print("   ✅ Incidents seeded (3)")
+
+        # Equipment Pannes
+        pannes_data = [
+            (new_id(), "EQ-003", "hydraulic_failure", "Perte de pression hydraulique complète sur la foreuse Atlas Copco D65", datetime.now().strftime("%Y-%m-%d"), "Kofi Mutombo", "open", now(), "daynriley@gmail.com"),
+            (new_id(), "EQ-006", "breakdown", "Bulldozer CAT D8T en panne moteur totale. Immobilisé sur zone de décapage.", (datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), "Ibrahim Kabila", "open", now(), "daynriley@gmail.com"),
+        ]
+        await db.executemany(
+            "INSERT INTO equipment_pannes (id, equipment_id, issue_type, description, reported_date, reported_by, status, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+            pannes_data
+        )
+        print("   ✅ Equipment pannes seeded (2)")
+
+
+
     print("\n🎉 Seeding terminé avec succès !")
-    print("   Login: daynriley@gmail.com / Marie_tte637")
+    print("   Comptes de connexion : voir create_accounts.py (python create_accounts.py)")
 
 if __name__ == "__main__":
     asyncio.run(seed_data())

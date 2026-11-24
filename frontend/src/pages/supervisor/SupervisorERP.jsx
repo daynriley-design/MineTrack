@@ -1,4 +1,4 @@
-import { CircleDollarSign, TrendingUp, TrendingDown, ArrowUpRight, Download, Printer, X } from 'lucide-react';
+import { CircleDollarSign, ArrowUpRight, Download, Printer, X } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -74,13 +74,13 @@ export default function SupervisorERP() {
               </tr>
             </thead>
             <tbody>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--color-chalk)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(17,18,20,0.05)', color: 'var(--color-chalk)' }}>
                 <td style={{ padding: '1rem 0' }}><strong>10L-XC5SS</strong></td>
                 <td>$45,230</td>
                 <td>$420/m</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.1)', height: '6px', borderRadius: '3px' }}>
+                    <div style={{ flex: 1, background: 'rgba(17,18,20,0.1)', height: '6px', borderRadius: '3px' }}>
                       <div style={{ width: '78%', background: 'var(--color-info)', height: '100%', borderRadius: '3px' }}></div>
                     </div>
                     <span style={{ fontSize: '0.75rem' }}>78%</span>
@@ -88,13 +88,13 @@ export default function SupervisorERP() {
                 </td>
                 <td style={{ textAlign: 'right', color: 'var(--color-emerald)', fontWeight: 600 }}>✅ OK</td>
               </tr>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--color-chalk)' }}>
+              <tr style={{ borderBottom: '1px solid rgba(17,18,20,0.05)', color: 'var(--color-chalk)' }}>
                 <td style={{ padding: '1rem 0' }}><strong>11L-FWS</strong></td>
                 <td>$12,450</td>
                 <td>$380/m</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.1)', height: '6px', borderRadius: '3px' }}>
+                    <div style={{ flex: 1, background: 'rgba(17,18,20,0.1)', height: '6px', borderRadius: '3px' }}>
                       <div style={{ width: '100%', background: 'var(--color-emerald)', height: '100%', borderRadius: '3px' }}></div>
                     </div>
                     <span style={{ fontSize: '0.75rem' }}>100%</span>
@@ -108,7 +108,7 @@ export default function SupervisorERP() {
                 <td>$450/m</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.1)', height: '6px', borderRadius: '3px' }}>
+                    <div style={{ flex: 1, background: 'rgba(17,18,20,0.1)', height: '6px', borderRadius: '3px' }}>
                       <div style={{ width: '92%', background: 'var(--color-warning)', height: '100%', borderRadius: '3px' }}></div>
                     </div>
                     <span style={{ fontSize: '0.75rem' }}>92%</span>
@@ -130,7 +130,7 @@ export default function SupervisorERP() {
                 <span>Main-d'œuvre</span>
                 <strong>45%</strong>
               </div>
-              <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', background: 'rgba(17,18,20,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
                 <div style={{ width: '45%', background: 'var(--color-info)', height: '100%' }}></div>
               </div>
             </div>
@@ -140,7 +140,7 @@ export default function SupervisorERP() {
                 <span>Explosifs</span>
                 <strong>25%</strong>
               </div>
-              <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', background: 'rgba(17,18,20,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
                 <div style={{ width: '25%', background: 'var(--color-danger)', height: '100%' }}></div>
               </div>
             </div>
@@ -150,7 +150,7 @@ export default function SupervisorERP() {
                 <span>Équipement</span>
                 <strong>20%</strong>
               </div>
-              <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', background: 'rgba(17,18,20,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
                 <div style={{ width: '20%', background: 'var(--color-warning)', height: '100%' }}></div>
               </div>
             </div>
@@ -160,7 +160,7 @@ export default function SupervisorERP() {
                 <span>Consommables</span>
                 <strong>10%</strong>
               </div>
-              <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', background: 'rgba(17,18,20,0.1)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
                 <div style={{ width: '10%', background: 'var(--color-emerald)', height: '100%' }}></div>
               </div>
             </div>

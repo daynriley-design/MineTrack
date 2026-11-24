@@ -1,6 +1,8 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FlaskConical, Map as MapIcon, Hammer, FileText, LogOut, UserCircle } from 'lucide-react';
+import { LayoutDashboard, FlaskConical, Map as MapIcon, Hammer, FileText, LogOut, UserCircle, Eye } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import OfflineBanner from '../OfflineBanner';
+import LanguageSwitcher from '../LanguageSwitcher';
 
 export default function GeologistLayout() {
   const { logout, user } = useAuth();
@@ -18,7 +20,7 @@ export default function GeologistLayout() {
     display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', 
     borderRadius: 'var(--radius-md)', 
     color: isActive(path) ? 'var(--color-white)' : 'var(--color-ash)',
-    background: isActive(path) ? 'rgba(255,255,255,0.05)' : 'transparent',
+    background: isActive(path) ? 'rgba(17,18,20,0.05)' : 'transparent',
     textDecoration: 'none', fontWeight: 600, transition: 'all 0.2s ease',
     borderLeft: isActive(path) ? `3px solid ${colorVar}` : '3px solid transparent'
   });
@@ -78,23 +80,34 @@ export default function GeologistLayout() {
             <Hammer size={20} color={isActive('/geologist/geotech') ? 'var(--color-warning)' : 'currentColor'} />
             Géotechnique
           </Link>
+
+          <Link to="/geologist/face-exam" className="sidebar-link" style={linkStyle('/geologist/face-exam', 'var(--color-danger)')}>
+            <Eye size={20} color={isActive('/geologist/face-exam') ? 'var(--color-danger)' : 'currentColor'} />
+            Face Examination
+          </Link>
           
           <Link to="/geologist/report" className="sidebar-link" style={linkStyle('/geologist/report', 'var(--color-chalk)')}>
             <FileText size={20} color={isActive('/geologist/report') ? 'var(--color-chalk)' : 'currentColor'} />
             Mini-Rapport
           </Link>
+
+          <Link to="/geologist/profile" className="sidebar-link" style={linkStyle('/geologist/profile', 'var(--color-emerald)')}>
+            <UserCircle size={20} color={isActive('/geologist/profile') ? 'var(--color-emerald)' : 'currentColor'} />
+            Mon Profil
+          </Link>
         </nav>
 
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-rock-3)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <LanguageSwitcher style={{ width: '100%' }} />
+          <Link to="/geologist/profile" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', cursor: 'pointer' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(17,18,20,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <UserCircle size={18} color="var(--color-chalk)" />
             </div>
             <div>
               <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-white)' }}>{user?.name}</p>
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-emerald)' }}>Mode expert activé</p>
             </div>
-          </div>
+          </Link>
           <button onClick={handleLogout} style={{ 
             width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
             background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-ruby)', border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -108,6 +121,7 @@ export default function GeologistLayout() {
 
       {/* Main Content */}
       <main style={{ flex: 1, padding: '2rem 3rem', overflowY: 'auto' }}>
+        <OfflineBanner />
         <Outlet />
       </main>
     </div>

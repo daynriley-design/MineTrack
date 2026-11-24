@@ -2,8 +2,8 @@
 Minetrack - Backend API Server (SQLite version)
 FastAPI + aiosqlite (no MongoDB required)
 """
-import os
 import json
+import os
 import uuid
 import aiosqlite
 from datetime import datetime, timezone
@@ -22,17 +22,21 @@ from models import (
     ProductionCreate, EquipmentCreate, LaborCreate,
     HSECreate, GeologyCreate, SupportCreate, FinancialCreate,
     PegAdvanceCreate, IncidentCreate, HSEChecklistCreate,
-    EquipmentPanneCreate, MiniReportCreate
+    EquipmentPanneCreate, MiniReportCreate,
+    PtoCreate, FaceExaminationCreate, GroundSupportCreate
 )
+from routers import operations
 from auth_utils import (
     hash_password, verify_password,
-    create_access_token, get_current_user
+    create_access_token, get_current_user, require_role
 )
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-DB_PATH = ROOT_DIR / "minetrack.db"
+# Chemin de la base : backend/minetrack.db en local ; sur un hebergeur sans
+# disque inscriptible (Vercel), MINETRACK_DB_PATH=/tmp/minetrack.db.
+DB_PATH = Path(os.environ.get("MINETRACK_DB_PATH") or ROOT_DIR / "minetrack.db")
 
 # ─── Tables DDL ──────────────────────────────────────────────────────────────
 TABLES = {
@@ -100,6 +104,8 @@ TABLES = {
             date TEXT,
             status TEXT DEFAULT 'planned',
             result TEXT,
+            advance_after_blast_m REAL,
+            reentry_minutes INTEGER,
             notes TEXT,
             created_at TEXT,
             created_by TEXT
@@ -204,6 +210,52 @@ TABLES = {
             created_by TEXT
         )
     """,
+    "pto": """
+        CREATE TABLE IF NOT EXISTS pto (
+            id TEXT PRIMARY KEY,
+            employee_id TEXT,
+            employee_name TEXT,
+            date TEXT,
+            leave_type TEXT DEFAULT 'conge',
+            days REAL DEFAULT 1,
+            status TEXT DEFAULT 'pending',
+            notes TEXT,
+            created_at TEXT,
+            created_by TEXT
+        )
+    """,
+    "face_examinations": """
+        CREATE TABLE IF NOT EXISTS face_examinations (
+            id TEXT PRIMARY KEY,
+            peg_id TEXT,
+            date TEXT,
+            examiner TEXT,
+            ground_condition TEXT DEFAULT 'safe',
+            hazards_observed TEXT,
+            ventilation_ok INTEGER DEFAULT 1,
+            gas_readings TEXT,
+            action_required TEXT,
+            status TEXT DEFAULT 'cleared',
+            photo TEXT,
+            created_at TEXT,
+            created_by TEXT
+        )
+    """,
+    "ground_support": """
+        CREATE TABLE IF NOT EXISTS ground_support (
+            id TEXT PRIMARY KEY,
+            peg_id TEXT,
+            support_type TEXT,
+            quantity REAL,
+            date_installed TEXT,
+            state TEXT DEFAULT 'good',
+            shotcrete_m3 REAL,
+            concrete_m3 REAL,
+            notes TEXT,
+            created_at TEXT,
+            created_by TEXT
+        )
+    """,
     "financial": """
         CREATE TABLE IF NOT EXISTS financial (
             id TEXT PRIMARY KEY,
@@ -273,6 +325,7 @@ TABLES = {
             reported_date TEXT,
             reported_by TEXT,
             status TEXT DEFAULT 'open',
+            photo TEXT,
             created_at TEXT,
             created_by TEXT
         )
@@ -332,71 +385,85 @@ def rows_to_list(rows, cursor):
     return result
 
 
-# ─── Lifespan ─────────────────────────────────────────────────────────────────
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Create tables
+# ─── Initialisation de la base ────────────────────────────────────────────────
+_db_ready = False
+
+
+async def ensure_db():
+    """Cree les tables (idempotent), une fois par processus.
+
+    Appelee au demarrage ET au premier appel d'API : sur Vercel, le lifespan
+    n'est pas garanti et /tmp repart vide a chaque nouvelle instance.
+    Avec MINETRACK_DEMO_ACCOUNTS=1, les comptes de demo sont aussi crees.
+    """
+    global _db_ready
+    if _db_ready:
+        return
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         for sql in TABLES.values():
             await db.execute(sql)
         await db.commit()
+    await operations.init_operations_tables()
+    if os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
+        from create_accounts import ensure_accounts
+        ensure_accounts(DB_PATH, verbose=False)
+    _db_ready = True
 
-        # Seed admin if not exists
-        async with db.execute("SELECT id FROM users WHERE role='admin' LIMIT 1") as cur:
-            existing = await cur.fetchone()
-        if not existing:
-            await db.execute(
-                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), "daynriley@gmail.com", hash_password("123"),
-                 "Superviseur Alpha", "supervisor", datetime.now(timezone.utc).isoformat())
-            )
-            await db.execute(
-                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), "daynriley@gmail.com", hash_password("1234"),
-                 "Géologue Expert", "geologist", datetime.now(timezone.utc).isoformat())
-            )
-            await db.execute(
-                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), "daynriley@gmail.com", hash_password("12345"),
-                 "Mineur 101", "operator", datetime.now(timezone.utc).isoformat())
-            )
-            await db.commit()
-            print("✅ Demo Supervisor: daynriley@gmail.com / 123")
-            print("✅ Demo Geologist: daynriley@gmail.com / 1234")
-            print("✅ Demo Operator: daynriley@gmail.com / 12345")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await ensure_db()
     yield
 
 
 app = FastAPI(title="Minetrack API", version="2.0.0", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def _init_db_middleware(request: Request, call_next):
+    await ensure_db()
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:4000", "http://127.0.0.1:4000",  # port réel du frontend (vite.config.js)
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(operations.router)
+
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
+# Rôles auto-inscriptibles publiquement. 'admin' exclu volontairement :
+# un compte admin ne doit jamais être créé via le formulaire public.
+SELF_REGISTER_ROLES = {"operator", "geologist", "supervisor"}
+
+
 @app.post("/api/auth/register")
 async def register(user_input: UserCreate, response: Response):
     email = user_input.email.lower()
+    safe_role = user_input.role if user_input.role in SELF_REGISTER_ROLES else "operator"
     async with aiosqlite.connect(DB_PATH) as db:
-        if email != "daynriley@gmail.com":
-            async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as cur:
-                if await cur.fetchone():
-                    raise HTTPException(status_code=400, detail="Email already registered")
+        async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as cur:
+            if await cur.fetchone():
+                raise HTTPException(status_code=400, detail="Email already registered")
         uid = str(uuid.uuid4())
         await db.execute(
             "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (uid, email, hash_password(user_input.password), user_input.name,
-             user_input.role, datetime.now(timezone.utc).isoformat())
+             safe_role, datetime.now(timezone.utc).isoformat())
         )
         await db.commit()
-    token = create_access_token({"sub": uid, "email": email, "role": user_input.role, "name": user_input.name})
+    token = create_access_token({"sub": uid, "email": email, "role": safe_role, "name": user_input.name})
     response.set_cookie("access_token", token, httponly=True, samesite="lax", max_age=86400)
-    return {"message": "Registered", "email": email, "role": user_input.role, "name": user_input.name}
+    return {"message": "Registered", "email": email, "role": safe_role, "name": user_input.name}
 
 
 @app.post("/api/auth/login")
@@ -432,6 +499,23 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
 
+@app.get("/api/supervisor/users")
+async def list_users(current_user: dict = Depends(require_role("supervisor", "admin"))):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC") as cur:
+            rows = await cur.fetchall()
+            return [{"id": r["id"], "email": r["email"], "name": r["name"], "role": r["role"], "created_at": r["created_at"]} for r in rows]
+
+
+@app.delete("/api/supervisor/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(require_role("supervisor", "admin"))):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM users WHERE id=?", (user_id,))
+        await db.commit()
+    return {"message": "User deleted"}
+
+
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 @app.get("/api/dashboard/stats")
 async def dashboard_stats(current_user: dict = Depends(get_current_user)):
@@ -445,11 +529,19 @@ async def dashboard_stats(current_user: dict = Depends(get_current_user)):
                 r = await c.fetchone()
                 return r[0] or 0 if r else 0
 
+        avg_progress = await scalar("SELECT AVG(progress_percent) FROM work_progress WHERE status != 'completed'")
+
+        async with db.execute(
+            "SELECT team, AVG(progress_percent) as perf FROM work_progress WHERE team IS NOT NULL AND team != '' GROUP BY team ORDER BY perf DESC LIMIT 5"
+        ) as c:
+            team_performance = [{"team": r[0], "avg_progress": round(r[1] or 0, 1)} for r in await c.fetchall()]
+
         return {
             "pegs": {
                 "total": await count("pegs"),
                 "active": await count("pegs", "status='active'"),
                 "completed": await count("pegs", "status='completed'"),
+                "avg_progress": round(avg_progress, 1),
             },
             "safety": {
                 "open_incidents": await count("hse", "status='open'"),
@@ -470,7 +562,8 @@ async def dashboard_stats(current_user: dict = Depends(get_current_user)):
             },
             "financial": {
                 "total_cost_usd": round(await scalar("SELECT SUM(amount_usd) FROM financial"), 2),
-            }
+            },
+            "team_performance": team_performance,
         }
 
 
@@ -486,10 +579,31 @@ async def dashboard_charts(current_user: dict = Depends(get_current_user)):
         async with db.execute("SELECT status, COUNT(*) FROM equipment GROUP BY status") as c:
             equip_status = {r[0]: r[1] for r in await c.fetchall()}
 
+        # Avancement par PEG (dernière valeur connue par peg)
+        async with db.execute(
+            "SELECT peg_id, AVG(progress_percent) as pct FROM work_progress WHERE peg_id IS NOT NULL AND peg_id != '' GROUP BY peg_id ORDER BY peg_id LIMIT 20"
+        ) as c:
+            peg_progress = [{"peg_id": r[0], "progress": round(r[1] or 0, 1)} for r in await c.fetchall()]
+
+        # Incidents par jour (14 derniers jours avec données)
+        async with db.execute(
+            "SELECT date, COUNT(*) as n FROM incidents WHERE date IS NOT NULL AND date != '' GROUP BY date ORDER BY date DESC LIMIT 14"
+        ) as c:
+            incidents_by_day = [{"date": r[0], "count": r[1]} for r in await c.fetchall()]
+
+        # PTO (congés) par jour
+        async with db.execute(
+            "SELECT date, SUM(days) as total_days FROM pto WHERE date IS NOT NULL AND date != '' GROUP BY date ORDER BY date DESC LIMIT 14"
+        ) as c:
+            pto_by_day = [{"date": r[0], "days": r[1] or 0} for r in await c.fetchall()]
+
     return {
         "production_trend": list(reversed(prod)),
         "hse_by_type": hse_by_type,
         "equipment_status": equip_status,
+        "peg_progress": peg_progress,
+        "incidents_by_day": list(reversed(incidents_by_day)),
+        "pto_by_day": list(reversed(pto_by_day)),
     }
 
 
@@ -569,7 +683,7 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)
             await db.commit()
-        return {"_id": uid, **data, "created_at": now}
+        return {"id": uid, **data, "created_at": now}
 
     @app.get(f"/api/{route_name}/{{item_id}}")
     async def get_item(item_id: str, current_user: dict = Depends(get_current_user)):
@@ -587,6 +701,17 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
             await db.commit()
         return {"message": "Deleted"}
 
+    @app.put(f"/api/{route_name}/{{item_id}}")
+    async def update_item(item_id: str, body: dict, current_user: dict = Depends(get_current_user)):
+        updates = {k: v for k, v in body.items() if k in fields}
+        if not updates:
+            return {"message": "Nothing to update"}
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", (*updates.values(), item_id))
+            await db.commit()
+        return {"message": "Updated"}
+
 
 MODULES_CONFIG = [
     ("work-progress", "work_progress", WorkProgressCreate,
@@ -594,7 +719,7 @@ MODULES_CONFIG = [
     ("drilling", "drilling", DrillingCreate,
      ["peg_id", "hole_id", "depth_m", "diameter_mm", "rock_type", "status", "date", "operator", "notes"]),
     ("blasting", "blasting", BlastingCreate,
-     ["peg_id", "blast_id", "explosives_kg", "holes_count", "date", "status", "result", "notes"]),
+     ["peg_id", "blast_id", "explosives_kg", "holes_count", "date", "status", "result", "advance_after_blast_m", "reentry_minutes", "notes"]),
     ("production", "production", ProductionCreate,
      ["peg_id", "date", "material_type", "volume_m3", "tonnage", "equipment_id", "shift", "notes"]),
     ("equipment", "equipment", EquipmentCreate,
@@ -616,9 +741,15 @@ MODULES_CONFIG = [
     ("hse-checklists", "hse_checklists", HSEChecklistCreate,
      ["peg_id", "shift", "date", "face_safe", "ventilation_ok", "gas_checked", "water_sprayed", "supports_ok", "notes"]),
     ("equipment-pannes", "equipment_pannes", EquipmentPanneCreate,
-     ["equipment_id", "issue_type", "description", "reported_date", "reported_by", "status"]),
+     ["equipment_id", "issue_type", "description", "reported_date", "reported_by", "status", "photo"]),
     ("mini-reports", "mini_reports", MiniReportCreate,
      ["shift", "date", "peg_id", "weather_conditions", "safety_summary", "production_summary", "issues_encountered", "submitted_by"]),
+    ("pto", "pto", PtoCreate,
+     ["employee_id", "employee_name", "date", "leave_type", "days", "status", "notes"]),
+    ("face-examinations", "face_examinations", FaceExaminationCreate,
+     ["peg_id", "date", "examiner", "ground_condition", "hazards_observed", "ventilation_ok", "gas_readings", "action_required", "status", "photo"]),
+    ("ground-support", "ground_support", GroundSupportCreate,
+     ["peg_id", "support_type", "quantity", "date_installed", "state", "shotcrete_m3", "concrete_m3", "notes"]),
 ]
 
 for route_name, table, ModelClass, fields in MODULES_CONFIG:

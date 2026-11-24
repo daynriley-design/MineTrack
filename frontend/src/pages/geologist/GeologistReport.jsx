@@ -1,18 +1,45 @@
-import { useState, useEffect } from 'react';
-import { FileText, Send, Download, CheckCircle, AlertTriangle, FlaskConical, Hammer, X, Printer } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Send, Download, CheckCircle, FlaskConical, Hammer, X, Printer } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { miniReportsAPI } from '../../api';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function GeologistReport() {
-  const [date, setDate] = useState('');
+  // Date du rapport, figee a l'ouverture de l'ecran.
+  const [{ date, isoDate }] = useState(() => {
+    const d = new Date();
+    return {
+      date: d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      isoDate: d.toISOString().slice(0, 10),
+    };
+  });
   const [showPdf, setShowPdf] = useState(false);
   const [signed, setSigned] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    const d = new Date();
-    setDate(d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }));
-  }, []);
+  const handleSend = async () => {
+    setIsSending(true);
+    toast('Envoi sécurisé au Superviseur...', 'info');
+    try {
+      await miniReportsAPI.create({
+        shift: 'Jour',
+        date: isoDate,
+        peg_id: '10L-XC5SS',
+        weather_conditions: 'normal',
+        safety_summary: '0 zone instable signalée. Bilan stabilité : Stable (RMR 68, Classe II).',
+        production_summary: '4 PEG visités, 3 échantillons prélevés, 2 résultats labo reçus. Teneurs moy. : 10L-XC5SS 2.3%, 11L-FWS 1.8%, 11L-XC3SS 2.1%.',
+        issues_encountered: 'Aucun incident majeur.',
+        submitted_by: user?.email || user?.name || 'Géologue',
+      });
+      toast('Rapport transmis avec succès au superviseur', 'success');
+    } catch {
+      toast("Erreur : le rapport n'a pas pu être transmis", 'error');
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '800px', margin: '0 auto' }}>
@@ -26,14 +53,8 @@ export default function GeologistReport() {
           <button className="premium-button secondary" onClick={() => setShowPdf(true)}><Download size={16}/> VOIR PDF</button>
           <button 
             className="premium-button" 
-            onClick={() => {
-              setIsSending(true);
-              toast('Envoi sécurisé au Superviseur...', 'info');
-              setTimeout(() => {
-                setIsSending(false);
-                toast('Rapport transmis avec succès', 'success');
-              }, 2000);
-            }}
+            disabled={isSending}
+            onClick={handleSend}
           >
             {isSending ? <span className="dot dot-green"></span> : <Send size={16}/>}
             {isSending ? 'ENVOI EN COURS...' : 'ENVOYER AU SUPERVISEUR'}
@@ -142,7 +163,7 @@ export default function GeologistReport() {
         <div className="modal-overlay" onClick={() => setShowPdf(false)}>
           <div className="modal print-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', height: '90vh', display: 'flex', flexDirection: 'column', background: 'white' }}>
             <div className="modal-header no-print" style={{ borderBottom: '1px solid var(--color-rock-3)', paddingBottom: '1rem', background: 'var(--color-rock-2)' }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}><FileText color="var(--color-info)"/> APERÇU DU DOCUMENT PDF</h3>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)' }}><FileText color="var(--color-info)"/> APERÇU DU DOCUMENT PDF</h3>
               <button onClick={() => setShowPdf(false)} className="btn btn-ghost btn-icon"><X size={20}/></button>
             </div>
             
@@ -213,7 +234,7 @@ export default function GeologistReport() {
             </div>
             
             <div className="modal-footer no-print" style={{ borderTop: '1px solid var(--color-rock-3)', paddingTop: '1rem', background: 'var(--color-rock-2)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)' }}>
                 <input 
                   type="checkbox" 
                   id="signCheckbox" 

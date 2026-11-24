@@ -1,6 +1,6 @@
 import { ShieldCheck, CheckCircle, XCircle, AlertCircle, Image as ImageIcon, MapPin } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { useSharedData } from '../../contexts/SharedDataContext';
+import { useSharedData } from '../../contexts/sharedDataStore';
 
 export default function SupervisorHSEValidation() {
   const { toast } = useToast();
@@ -31,7 +31,7 @@ export default function SupervisorHSEValidation() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {declarations.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', background: 'rgba(41, 37, 36, 0.4)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-rock-3)' }}>
+          <div style={{ padding: '3rem', textAlign: 'center', background: '#FFFFFF', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-rock-3)' }}>
             <CheckCircle size={48} color="var(--color-emerald)" style={{ opacity: 0.5, marginBottom: '1rem' }} />
             <h3 style={{ color: 'var(--color-white)' }}>Aucune déclaration en attente</h3>
             <p style={{ color: 'var(--color-stone)' }}>Toutes les zones actives ont été validées pour ce shift.</p>
@@ -52,7 +52,7 @@ export default function SupervisorHSEValidation() {
                 <strong>PIC :</strong> {decl.pic} &nbsp;|&nbsp; <strong>Shift Boss :</strong> {decl.shiftBoss}
               </p>
 
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', borderLeft: '3px solid var(--color-emerald)' }}>
+              <div style={{ background: 'rgba(17,18,20,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', borderLeft: '3px solid var(--color-emerald)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)', marginBottom: '0.5rem' }}>
                   <CheckCircle size={16} color="var(--color-emerald)" /> {decl.gas ? '8' : '4'} points de contrôle validés
                 </div>

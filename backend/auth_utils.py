@@ -2,14 +2,18 @@ import os
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
-from fastapi import HTTPException, Request
-from bson import ObjectId
+from fastapi import HTTPException, Request, Depends
 
 JWT_ALGORITHM = "HS256"
 
 
 def get_jwt_secret() -> str:
-    return os.environ.get("JWT_SECRET", "minetrack_secret_key_2024")
+    secret = os.environ.get("JWT_SECRET")
+    if not secret:
+        raise RuntimeError(
+            "JWT_SECRET manquant. Génère-le : python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    return secret
 
 
 def hash_password(password: str) -> str:
@@ -17,7 +21,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except (ValueError, TypeError):
+        # Hash corrompu ou ancien format (ex: mot de passe en clair d'une ancienne version) -> refuse proprement
+        return False
 
 
 def create_access_token(data: dict, expires_hours: int = 24) -> str:
@@ -44,5 +52,15 @@ async def get_current_user(request: Request):
             token = auth_header[7:]
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    payload = decode_token(token)
-    return payload
+    return decode_token(token)
+
+
+def require_role(*allowed_roles: str):
+    """Dépendance FastAPI : restreint une route aux rôles listés.
+    Avant : get_current_user seul vérifiait l'authentification mais AUCUN rôle
+    -> un compte 'operator' (mineur) pouvait appeler DELETE /supervisor/users/{id}."""
+    async def checker(current_user: dict = Depends(get_current_user)):
+        if current_user.get("role") not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Accès refusé pour ce rôle")
+        return current_user
+    return checker

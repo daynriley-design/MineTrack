@@ -35,13 +35,13 @@ export default function SupervisorProfile() {
         {/* Identité */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div style={{ background: 'var(--color-rock-2)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.5rem', textAlign: 'center' }}>
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(17,18,20,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
               <User size={40} color="var(--color-chalk)" />
             </div>
             <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-white)' }}>{user?.name || 'Vincent K.'}</h3>
             <span style={{ background: 'var(--color-info)', color: 'white', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>Shift Boss</span>
             
-            <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'left', color: 'var(--color-chalk)', fontSize: '0.9rem', lineHeight: '1.8' }}>
+            <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(17,18,20,0.05)', textAlign: 'left', color: 'var(--color-chalk)', fontSize: '0.9rem', lineHeight: '1.8' }}>
               <div><strong style={{ color: 'var(--color-stone)' }}>Matricule :</strong> 4245</div>
               <div><strong style={{ color: 'var(--color-stone)' }}>Entreprise :</strong> Reliant Congo</div>
               <div><strong style={{ color: 'var(--color-stone)' }}>Site :</strong> MPAMA North</div>
@@ -83,7 +83,7 @@ export default function SupervisorProfile() {
                 <Bell size={20} />
                 <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Notifications</h3>
               </div>
-              <div style={{ display: 'flex', gap: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', background: 'rgba(17,18,20,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
                 <label className="form-checkbox-label"><input type="checkbox" className="form-checkbox" defaultChecked /> Push (Mobile)</label>
                 <label className="form-checkbox-label"><input type="checkbox" className="form-checkbox" defaultChecked /> SMS</label>
                 <label className="form-checkbox-label"><input type="checkbox" className="form-checkbox" defaultChecked /> Email</label>
@@ -130,7 +130,7 @@ export default function SupervisorProfile() {
                 <AlertTriangle size={20} />
                 <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Délais d'Escalade (Non-réponse)</h3>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', background: 'rgba(17,18,20,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
                 <div>
                   <label style={{ display: 'block', color: 'var(--color-stone)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Niveau 1</label>
                   <input type="number" className="premium-input" style={{ width: '100%' }} defaultValue="5" />

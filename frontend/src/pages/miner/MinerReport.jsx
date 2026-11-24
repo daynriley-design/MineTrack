@@ -19,7 +19,7 @@ export default function MinerReport() {
         <h3 style={{ margin: 0, color: 'var(--color-white)', fontWeight: 700 }}>Rapport de Fin de Poste</h3>
       </div>
 
-      <div style={{ background: 'rgba(41, 37, 36, 0.4)', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.5rem' }}>
+      <div style={{ background: '#FFFFFF', border: '1px solid var(--color-rock-3)', borderRadius: 'var(--radius-lg)', padding: '1.5rem' }}>
         <form onSubmit={handleSubmit}>
           
           <div className="form-group">
@@ -40,11 +40,11 @@ export default function MinerReport() {
           <button type="submit" style={{ 
             width: '100%', padding: '1rem', marginTop: '1rem', 
             background: 'linear-gradient(135deg, var(--color-rock-3), var(--color-rock-4))', 
-            color: 'white', border: '1px solid var(--color-stone)', borderRadius: 'var(--radius-md)', 
+            color: 'var(--color-white)', border: '1px solid var(--color-stone)', borderRadius: 'var(--radius-md)', 
             fontWeight: 600, fontSize: '1rem', cursor: 'pointer',
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
             transition: 'all 0.2s ease'
-          }} onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--color-gold)'; e.currentTarget.style.color = 'var(--color-gold)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--color-stone)'; e.currentTarget.style.color = 'white'; }}>
+          }} onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--color-gold)'; e.currentTarget.style.color = 'var(--color-gold)'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--color-stone)'; e.currentTarget.style.color = 'var(--color-white)'; }}>
             <Send size={18} />
             Soumettre le Rapport
           </button>

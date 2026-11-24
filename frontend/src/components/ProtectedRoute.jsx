@@ -22,19 +22,25 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect based on role if they try to access something they shouldn't
-    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+    if (user.role === 'admin') return <Navigate to="/admin/operations" replace />;
+    if (user.role === 'management') return <Navigate to="/management/reports" replace />;
     if (user.role === 'supervisor') return <Navigate to="/supervisor/dashboard" replace />;
     if (user.role === 'geologist') return <Navigate to="/geologist/dashboard" replace />;
     if (user.role === 'operator') return <Navigate to="/miner/dashboard" replace />;
+    if (user.role === 'logistique') return <Navigate to="/logistique/dashboard" replace />;
+    if (user.role === 'support') return <Navigate to="/support/dashboard" replace />;
     return <Navigate to="/login" replace />;
   }
 
   // If root is accessed, redirect to the default dashboard for their role
   if (location.pathname === '/') {
-    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+    if (user.role === 'admin') return <Navigate to="/admin/operations" replace />;
+    if (user.role === 'management') return <Navigate to="/management/reports" replace />;
     if (user.role === 'supervisor') return <Navigate to="/supervisor/dashboard" replace />;
     if (user.role === 'geologist') return <Navigate to="/geologist/dashboard" replace />;
     if (user.role === 'operator') return <Navigate to="/miner/dashboard" replace />;
+    if (user.role === 'logistique') return <Navigate to="/logistique/dashboard" replace />;
+    if (user.role === 'support') return <Navigate to="/support/dashboard" replace />;
   }
 
   return children || null;

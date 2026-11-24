@@ -37,7 +37,8 @@ export default function ModulePage({
     setLoading(true);
     try {
       const res = await api.list();
-      setItems(res.data);
+      // API paginée par curseur: { items, next_cursor }. Garde compat si array brut.
+      setItems(Array.isArray(res.data) ? res.data : res.data.items);
     } catch {
       toast('Erreur lors du chargement des données', 'error');
     } finally {
@@ -45,11 +46,17 @@ export default function ModulePage({
     }
   };
 
+  // Premier chargement : `loading` vaut deja true, l'etat n'est pose
+  // qu'a la reponse (regle react-hooks/set-state-in-effect).
   useEffect(() => {
+    let alive = true;
+    api.list()
+      .then((res) => { if (alive) setItems(Array.isArray(res.data) ? res.data : res.data.items); })
+      .catch(() => { if (alive) toast('Erreur lors du chargement des données', 'error'); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // fetchItems();
-    api.get(`/${apiPath}`).then(res => setItems(res.data)).catch(console.error);
-  }, [api, apiPath]);
+  }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -72,7 +79,7 @@ export default function ModulePage({
     try {
       await api.delete(id);
       toast('Enregistrement supprimé', 'success');
-      setItems((prev) => prev.filter((i) => i._id !== id));
+      setItems((prev) => prev.filter((i) => i.id !== id));
     } catch {
       toast('Erreur lors de la suppression', 'error');
     }
@@ -150,7 +157,7 @@ export default function ModulePage({
               </thead>
               <tbody>
                 {filtered.map((item) => (
-                  <tr key={item._id}>
+                  <tr key={item.id}>
                     {columns.map((col) => (
                       <td key={col.key}>
                         {col.render ? col.render(item[col.key], item) : (item[col.key] ?? '—')}
@@ -159,7 +166,7 @@ export default function ModulePage({
                     <td>
                       <button
                         className="btn btn-danger btn-sm btn-icon"
-                        onClick={() => handleDelete(item._id)}
+                        onClick={() => handleDelete(item.id)}
                         title="Supprimer"
                       >
                         <Trash2 size={14} />

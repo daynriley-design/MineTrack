@@ -1,54 +1,67 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { SharedDataContext } from './sharedDataStore';
 
-const SharedDataContext = createContext(null);
+const STORAGE_KEY = 'minetrack_shared_data';
+const DEFAULT_DATA = {
+  hseDeclarations: [
+    { id: 'HSE-001', date: '17/06/2026 07:30', author: 'Jean-Pierre M.', peg: '10L-XC5SS', status: 'En attente' }
+  ],
+  geologistReports: [],
+  incidents: []
+};
 
 export function SharedDataProvider({ children }) {
-  // Try to load from localStorage, otherwise use default mock data
   const [data, setData] = useState(() => {
-    const saved = localStorage.getItem('minetrack_shared_data');
-    if (saved) return JSON.parse(saved);
-    return {
-      hseDeclarations: [
-        { id: 'HSE-001', date: '17/06/2026 07:30', author: 'Jean-Pierre M.', peg: '10L-XC5SS', status: 'En attente' }
-      ],
-      geologistReports: [],
-      incidents: []
-    };
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : DEFAULT_DATA;
+    } catch {
+      return DEFAULT_DATA;
+    }
   });
 
-  // Save to localStorage whenever data changes
+  // PERF: écriture localStorage débattue (debounce) — évite de sérialiser
+  // et écrire sur disque à chaque frappe/mise à jour rapide successive.
+  const writeTimer = useRef(null);
   useEffect(() => {
-    localStorage.setItem('minetrack_shared_data', JSON.stringify(data));
+    if (writeTimer.current) clearTimeout(writeTimer.current);
+    writeTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        // quota dépassé ou storage indisponible: on ignore silencieusement
+      }
+    }, 300);
+    return () => clearTimeout(writeTimer.current);
   }, [data]);
 
-  const addHSEDeclaration = (declaration) => {
-    setData(prev => ({
-      ...prev,
-      hseDeclarations: [declaration, ...prev.hseDeclarations]
-    }));
-  };
+  // PERF: handlers stables (useCallback) — ne changent pas d'identité à
+  // chaque render, donc les composants enfants qui les reçoivent en props
+  // ne re-rendent pas inutilement (utile avec React.memo en aval).
+  const addHSEDeclaration = useCallback((declaration) => {
+    setData(prev => ({ ...prev, hseDeclarations: [declaration, ...prev.hseDeclarations] }));
+  }, []);
 
-  const approveHSEDeclaration = (id) => {
-    setData(prev => ({
-      ...prev,
-      hseDeclarations: prev.hseDeclarations.filter(d => d.id !== id)
-    }));
-  };
+  const approveHSEDeclaration = useCallback((id) => {
+    setData(prev => ({ ...prev, hseDeclarations: prev.hseDeclarations.filter(d => d.id !== id) }));
+  }, []);
 
-  const addGeologistReport = (report) => {
-    setData(prev => ({
-      ...prev,
-      geologistReports: [report, ...prev.geologistReports]
-    }));
-  };
+  const addGeologistReport = useCallback((report) => {
+    setData(prev => ({ ...prev, geologistReports: [report, ...prev.geologistReports] }));
+  }, []);
+
+  // PERF: value mémoïsée — sans ça, un nouvel objet littéral est créé à
+  // CHAQUE render du Provider, ce qui force TOUS les consumers (useSharedData)
+  // à re-render même quand `data` n'a pas changé.
+  const value = useMemo(
+    () => ({ data, addHSEDeclaration, approveHSEDeclaration, addGeologistReport }),
+    [data, addHSEDeclaration, approveHSEDeclaration, addGeologistReport]
+  );
 
   return (
-    <SharedDataContext.Provider value={{ data, addHSEDeclaration, approveHSEDeclaration, addGeologistReport }}>
+    <SharedDataContext.Provider value={value}>
       {children}
     </SharedDataContext.Provider>
   );
 }
 
-export function useSharedData() {
-  return useContext(SharedDataContext);
-}

@@ -109,7 +109,7 @@ export default function MinerDashboard() {
             <div key={peg.name} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <span style={{ color: 'var(--color-white)', fontWeight: 700, width: '110px', flexShrink: 0 }}>{peg.name}</span>
               <span style={{ color: 'var(--color-stone)', fontSize: '0.8rem', width: '110px', flexShrink: 0 }}>{peg.activity}</span>
-              <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
+              <div style={{ flex: 1, background: 'rgba(17,18,20,0.08)', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
                 <div style={{ width: `${peg.progress}%`, height: '100%', background: peg.color, borderRadius: '5px', transition: 'width 1s ease' }} />
               </div>
               <span style={{ color: peg.color, fontWeight: 800, width: '45px', textAlign: 'right' }}>{peg.progress}%</span>
