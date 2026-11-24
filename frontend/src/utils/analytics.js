@@ -5,7 +5,7 @@
  * defini au moment du build (Vercel : variable d'environnement du projet).
  * Sans identifiant, rien n'est charge.
  *
- * - Pages vues envoyees a chaque changement de route (application monopage).
+ * - Pages vues : gerees par la « mesure amelioree » du flux GA (historique).
  * - Aucune donnee personnelle : pas d'email ni de nom ; signaux Google et
  *   personnalisation publicitaire desactives.
  */
@@ -21,8 +21,9 @@ export function initAnalytics() {
   // gtag attend l'objet « arguments » tel quel (format officiel de Google).
   window.gtag = function gtag() { window.dataLayer.push(arguments); };
   window.gtag('js', new Date());
+  // Pages vues : page d'arrivee + changements de route comptes par GA lui-meme
+  // (« mesure amelioree » du flux Web, evenements d'historique du navigateur).
   window.gtag('config', GA_ID, {
-    send_page_view: false, // envoyees manuellement par trackPageView
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
   });
@@ -30,15 +31,6 @@ export function initAnalytics() {
   s.async = true;
   s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_ID)}`;
   document.head.appendChild(s);
-}
-
-export function trackPageView(path) {
-  if (!started || !window.gtag) return;
-  window.gtag('event', 'page_view', {
-    page_path: path,
-    page_location: window.location.origin + path,
-    page_title: document.title,
-  });
 }
 
 /** Evenement metier optionnel (ex. trackEvent('report_pdf', { kind: 'weekly' })). */
