@@ -40,3 +40,11 @@ frontend.zip
 
 .vercel
 backend/*.bak
+
+# Cles et certificats (Apple, Google, signatures) : jamais dans Git
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+AuthKey_*

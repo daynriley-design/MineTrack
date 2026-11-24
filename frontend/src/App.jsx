@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { SharedDataProvider } from './contexts/SharedDataContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -70,7 +69,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SharedDataProvider>
           <ToastProvider>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
@@ -176,7 +174,6 @@ export default function App() {
               </Routes>
             </Suspense>
           </ToastProvider>
-        </SharedDataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

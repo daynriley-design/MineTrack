@@ -1,98 +1,105 @@
-import { ShieldCheck, CheckCircle, XCircle, AlertCircle, Image as ImageIcon, MapPin } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ShieldCheck, CheckCircle, XCircle, Wind, Clock } from 'lucide-react';
+import api, { hseChecklistsAPI } from '../../api';
 import { useToast } from '../../contexts/ToastContext';
-import { useSharedData } from '../../contexts/sharedDataStore';
+import PageHero from '../../components/PageHero';
 
+const asList = (data) => (Array.isArray(data) ? data : data?.items || []);
+const fr = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+const CHECKS = [
+  ['face_safe', 'Front sécurisé'],
+  ['ventilation_ok', 'Ventilation active'],
+  ['gas_checked', 'Gaz vérifiés'],
+  ['water_sprayed', 'Arrosage effectué'],
+  ['supports_ok', 'Soutènement vérifié'],
+];
+
+/** Declarations « Face Safe » envoyees par les mineurs (API /hse-checklists). */
 export default function SupervisorHSEValidation() {
   const { toast } = useToast();
-  const { data, approveHSEDeclaration } = useSharedData();
-  const declarations = data.hseDeclarations;
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('pending');
 
-  const handleValidate = (id) => {
-    approveHSEDeclaration(id);
-    toast("Déclaration HSE validée et archivée", "success");
-  };
+  const load = () => hseChecklistsAPI.list()
+    .then(({ data }) => setItems(asList(data)))
+    .catch(() => toast('Impossible de charger les déclarations', 'error'))
+    .finally(() => setLoading(false));
 
-  const handleReject = (id) => {
-    approveHSEDeclaration(id);
-    toast("Déclaration HSE rejetée - Alerte envoyée au mineur", "danger");
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shown = useMemo(() => items.filter((d) => (d.status || 'pending') === tab), [items, tab]);
+  const pendingCount = items.filter((d) => (d.status || 'pending') === 'pending').length;
+
+  const review = async (d, decision) => {
+    const id = d._id || d.id;
+    try {
+      await api.post(`/hse-checklists/${id}/review`, { decision });
+      toast(decision === 'approved' ? 'Déclaration validée' : 'Déclaration rejetée', 'success');
+      setItems((prev) => prev.map((x) => ((x._id || x.id) === id ? { ...x, status: decision } : x)));
+    } catch (err) {
+      toast(err?.response?.data?.detail || 'Action impossible', 'error');
+    }
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-        <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--color-emerald)' }}>
-          <ShieldCheck size={28} />
+      <PageHero title="Validation HSE" subtitle={pendingCount ? `${pendingCount} déclaration(s) à valider` : 'déclarations Face Safe'}>
+        <div className="mt-chips" role="tablist" aria-label="Statut">
+          {[['pending', 'En attente'], ['approved', 'Validées'], ['rejected', 'Rejetées']].map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className={`mt-chip${tab === k ? ' is-active' : ''}`} onClick={() => setTab(k)}>
+              {label}
+            </button>
+          ))}
         </div>
-        <div>
-          <h2 style={{ margin: 0, color: 'var(--color-white)', fontWeight: 800, fontSize: '1.5rem' }}>Validation HSE</h2>
-          <p style={{ margin: 0, color: 'var(--color-stone)' }}>Déclarations "Face Safe" en attente de validation</p>
-        </div>
-      </div>
+      </PageHero>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {declarations.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', background: '#FFFFFF', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-rock-3)' }}>
-            <CheckCircle size={48} color="var(--color-emerald)" style={{ opacity: 0.5, marginBottom: '1rem' }} />
-            <h3 style={{ color: 'var(--color-white)' }}>Aucune déclaration en attente</h3>
-            <p style={{ color: 'var(--color-stone)' }}>Toutes les zones actives ont été validées pour ce shift.</p>
-          </div>
-        ) : declarations.map(decl => (
-          <div key={decl.id} style={{ background: 'var(--color-rock-2)', border: '1px solid var(--color-emerald)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-            <div style={{ padding: '1rem 1.5rem', background: 'rgba(16, 185, 129, 0.1)', borderBottom: '1px solid var(--color-emerald)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <ShieldCheck size={20} color="var(--color-emerald)" />
-                <h3 style={{ margin: 0, color: 'var(--color-white)' }}>Face Safe Declaration - {decl.peg}</h3>
-              </div>
-              <span style={{ color: 'var(--color-emerald)', fontWeight: 700 }}>15:30</span>
+      <div className="mt-body mt-page">
+        {loading && <p className="mt-empty">Chargement…</p>}
+        {!loading && shown.length === 0 && (
+          <section className="mt-card mt-card--row">
+            <div className="mt-list__icon" style={{ background: '#E7F7EF', color: '#047857' }}><ShieldCheck size={18} /></div>
+            <p className="mt-card__eyebrow" style={{ margin: 0 }}>
+              {tab === 'pending' ? 'Aucune déclaration en attente de validation.' : 'Aucune déclaration dans cette liste.'}
+            </p>
+          </section>
+        )}
+
+        {shown.map((d) => (
+          <section key={d._id || d.id} className="mt-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Face Safe — {d.peg_id}</h3>
+              <span style={{ color: 'var(--color-stone)', fontSize: '0.85rem' }}>
+                {d.date} · {d.shift === 'night' ? 'Nuit' : 'Jour'} · envoyée {fr(d.created_at)}
+              </span>
             </div>
-            
-            <div style={{ padding: '1.5rem' }}>
-              <p style={{ margin: '0 0 1rem 0', color: 'var(--color-chalk)' }}>
-                <strong>Date :</strong> {decl.date} <br/>
-                <strong>PIC :</strong> {decl.pic} &nbsp;|&nbsp; <strong>Shift Boss :</strong> {decl.shiftBoss}
+            <p style={{ margin: '0.5rem 0 0.75rem', color: 'var(--color-chalk)', fontSize: '0.9rem' }}>
+              PIC : <strong>{d.pic || '—'}</strong> · Shift boss : <strong>{d.shift_boss || '—'}</strong> · Déclarant : {d.created_by || '—'}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.75rem' }}>
+              {CHECKS.map(([k, label]) => (
+                <span key={k} className={`mt-pill ${Number(d[k]) ? 'mt-pill--soft-green' : 'mt-pill--soft-red'}`}>
+                  {Number(d[k]) ? '✓' : '✗'} {label}
+                </span>
+              ))}
+            </div>
+            <p style={{ margin: 0, display: 'flex', gap: '1.25rem', flexWrap: 'wrap', color: 'var(--color-ash)', fontSize: '0.88rem' }}>
+              <span style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}><Wind size={15} /> CH4 {d.gas_ch4 ?? '—'} % · CO {d.gas_co ?? '—'} ppm · O2 {d.gas_o2 ?? '—'} %</span>
+              <span style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}><Clock size={15} /> Ré-entrée : {d.reentry_minutes ?? '—'} min</span>
+            </p>
+            {d.notes && <p style={{ margin: '0.6rem 0 0', fontSize: '0.88rem', color: 'var(--color-chalk)' }}>{d.notes}</p>}
+            {d.status && d.status !== 'pending' && (
+              <p style={{ margin: '0.6rem 0 0', fontSize: '0.82rem', color: 'var(--color-stone)' }}>
+                {d.status === 'approved' ? 'Validée' : 'Rejetée'} par {d.reviewed_by || '—'} le {fr(d.reviewed_at)}
               </p>
-
-              <div style={{ background: 'rgba(17,18,20,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', borderLeft: '3px solid var(--color-emerald)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)', marginBottom: '0.5rem' }}>
-                  <CheckCircle size={16} color="var(--color-emerald)" /> {decl.gas ? '8' : '4'} points de contrôle validés
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)', marginBottom: '0.5rem' }}>
-                  <CheckCircle size={16} color="var(--color-emerald)" /> GDI relevés : CH4 {decl.gas ? decl.gas.ch4 : '0.0%'} | CO {decl.gas ? decl.gas.co : '0.0%'} | O2 {decl.gas ? decl.gas.o2 : '20.9%'}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)', marginBottom: '0.5rem' }}>
-                  <CheckCircle size={16} color="var(--color-emerald)" /> Re-entry period : {decl.reentry || '0 min'}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-white)' }}>
-                  <CheckCircle size={16} color="var(--color-emerald)" /> Déclaration sécurité signée
-                </div>
+            )}
+            {(d.status || 'pending') === 'pending' && (
+              <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                <button type="button" className="mt-btn" onClick={() => review(d, 'approved')}><CheckCircle size={17} /> Valider</button>
+                <button type="button" className="mt-btn mt-btn--ghost" style={{ color: 'var(--color-ruby)' }} onClick={() => review(d, 'rejected')}><XCircle size={17} /> Rejeter</button>
               </div>
-
-              <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.5rem' }}>
-                <div>
-                  <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-stone)' }}>✍️ Signatures :</p>
-                  <span style={{ color: 'var(--color-chalk)' }}>PIC : <strong style={{ color: 'var(--color-emerald)' }}>[✅ Signé]</strong></span> &nbsp;&nbsp;
-                  <span style={{ color: 'var(--color-chalk)' }}>Shift Boss : <strong style={{ color: 'var(--color-emerald)' }}>[✅ Signé]</strong></span>
-                </div>
-                <div>
-                  <p style={{ margin: '0 0 0.5rem 0', color: 'var(--color-stone)' }}>Pièces jointes :</p>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-info)' }}><ImageIcon size={16} /> {decl.photos || 0} photos</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-chalk)', marginTop: '0.25rem' }}><MapPin size={16} /> GPS: {decl.coords || 'Non spécifié'}</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid var(--color-rock-3)', paddingTop: '1.5rem' }}>
-                <button onClick={() => handleValidate(decl.id)} className="btn-success" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 700, cursor: 'pointer', border: 'none', color: 'white', background: 'var(--color-emerald)' }}>
-                  <CheckCircle size={20} /> VALIDER
-                </button>
-                <button onClick={() => handleReject(decl.id)} className="btn-danger" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 700, cursor: 'pointer', border: 'none', color: 'white', background: 'var(--color-danger)' }}>
-                  <XCircle size={20} /> REJETER
-                </button>
-                <button className="btn-secondary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 700, cursor: 'pointer', background: 'transparent', border: '1px solid var(--color-stone)', color: 'var(--color-white)' }}>
-                  <AlertCircle size={20} /> DEMANDER CORRECTION
-                </button>
-              </div>
-            </div>
-          </div>
+            )}
+          </section>
         ))}
       </div>
     </div>

@@ -198,6 +198,12 @@ class HSEChecklistCreate(BaseModel):
     water_sprayed: bool = False
     supports_ok: bool = False
     notes: Optional[str] = None
+    shift_boss: Optional[str] = None
+    pic: Optional[str] = None
+    gas_ch4: Optional[float] = None
+    gas_co: Optional[float] = None
+    gas_o2: Optional[float] = None
+    reentry_minutes: Optional[int] = None
 
 class EquipmentPanneCreate(BaseModel):
     equipment_id: str

@@ -15,3 +15,10 @@ _sauvegarde_theme_sombre_src
 frontend.zip
 START_MINETRACK.bat
 backend/*.bak
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+AuthKey_*
+ios

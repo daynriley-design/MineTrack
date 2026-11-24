@@ -309,14 +309,23 @@ TABLES = {
             peg_id TEXT,
             shift TEXT,
             date TEXT,
-            face_safe BOOLEAN DEFAULT 0,
-            ventilation_ok BOOLEAN DEFAULT 0,
-            gas_checked BOOLEAN DEFAULT 0,
-            water_sprayed BOOLEAN DEFAULT 0,
-            supports_ok BOOLEAN DEFAULT 0,
+            face_safe INTEGER DEFAULT 0,
+            ventilation_ok INTEGER DEFAULT 0,
+            gas_checked INTEGER DEFAULT 0,
+            water_sprayed INTEGER DEFAULT 0,
+            supports_ok INTEGER DEFAULT 0,
             notes TEXT,
             created_at TEXT,
-            created_by TEXT
+            created_by TEXT,
+            shift_boss TEXT,
+            pic TEXT,
+            gas_ch4 REAL,
+            gas_co REAL,
+            gas_o2 REAL,
+            reentry_minutes INTEGER,
+            status TEXT DEFAULT 'pending',
+            reviewed_by TEXT,
+            reviewed_at TEXT
         )
     """,
     "equipment_pannes": """
@@ -392,6 +401,20 @@ def rows_to_list(rows, cursor):
 _db_ready = False
 
 
+async def _add_columns(columns):
+    """Ajoute des colonnes manquantes (idempotent, SQLite et Postgres)."""
+    for table, col, ddl in columns:
+        try:
+            async with database.connect() as db:
+                if database.IS_POSTGRES:
+                    await db.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl}')
+                else:
+                    await db.execute(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}')
+                await db.commit()
+        except Exception:
+            pass  # SQLite : colonne deja presente
+
+
 async def ensure_db():
     """Cree les tables (idempotent), une fois par processus.
 
@@ -409,16 +432,19 @@ async def ensure_db():
             await db.execute(sql)
         await database.protect_tables(db, TABLES.keys())
         await db.commit()
-    # Migration : colonne users.status (comptes « pending » de l'inscription publique).
-    async with database.connect() as db:
-        try:
-            if database.IS_POSTGRES:
-                await db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'")
-            else:
-                await db.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
-            await db.commit()
-        except Exception:
-            pass  # SQLite : colonne deja presente
+    # Migrations : colonnes ajoutees apres coup (bases deja creees).
+    await _add_columns([
+        ("users", "status", "TEXT DEFAULT 'active'"),
+        ("hse_checklists", "shift_boss", "TEXT"),
+        ("hse_checklists", "pic", "TEXT"),
+        ("hse_checklists", "gas_ch4", "REAL"),
+        ("hse_checklists", "gas_co", "REAL"),
+        ("hse_checklists", "gas_o2", "REAL"),
+        ("hse_checklists", "reentry_minutes", "INTEGER"),
+        ("hse_checklists", "status", "TEXT DEFAULT 'pending'"),
+        ("hse_checklists", "reviewed_by", "TEXT"),
+        ("hse_checklists", "reviewed_at", "TEXT"),
+    ])
     await operations.init_operations_tables()
     if os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
         from create_accounts import ensure_accounts
@@ -432,11 +458,26 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Minetrack API", version="2.0.0", lifespan=lifespan)
+# En production (Vercel), la documentation interactive de l'API n'est pas publiee :
+# elle listait publiquement toutes les routes. En local : /docs reste disponible.
+_IS_PROD = bool(os.environ.get("VERCEL")) or os.environ.get("MINETRACK_ENV") == "production"
+app = FastAPI(
+    title="Minetrack API", version="2.0.0", lifespan=lifespan,
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
+
+MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 Mo (photos en base64 comprises)
 
 
 @app.middleware("http")
 async def _init_db_middleware(request: Request, call_next):
+    # Refuse les corps de requete demesures avant de les lire.
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > MAX_BODY_BYTES:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Requête trop volumineuse (10 Mo maximum)"}, status_code=413)
     await ensure_db()
     return await call_next(request)
 
@@ -488,8 +529,19 @@ def _set_session_cookie(response: Response, request: Request, token: str):
 
 def _recent_failures(key) -> list:
     cutoff = datetime.now(timezone.utc).timestamp() - LOGIN_WINDOW_SECONDS
+    # Menage periodique : les compteurs ne grossissent pas sans fin en memoire.
+    if len(_login_failures) > 5000:
+        for k in [k for k, v in _login_failures.items() if not v or v[-1] < cutoff]:
+            _login_failures.pop(k, None)
+    if len(_register_attempts) > 5000:
+        hour_ago = datetime.now(timezone.utc).timestamp() - 3600
+        for k in [k for k, v in _register_attempts.items() if not v or v[-1] < hour_ago]:
+            _register_attempts.pop(k, None)
     attempts = [t for t in _login_failures.get(key, []) if t > cutoff]
-    _login_failures[key] = attempts
+    if attempts:
+        _login_failures[key] = attempts
+    else:
+        _login_failures.pop(key, None)
     return attempts
 
 
@@ -876,7 +928,8 @@ MODULES_CONFIG = [
     ("incidents", "incidents", IncidentCreate,
      ["title", "description", "severity", "location", "date", "reported_by"]),
     ("hse-checklists", "hse_checklists", HSEChecklistCreate,
-     ["peg_id", "shift", "date", "face_safe", "ventilation_ok", "gas_checked", "water_sprayed", "supports_ok", "notes"]),
+     ["peg_id", "shift", "date", "face_safe", "ventilation_ok", "gas_checked", "water_sprayed", "supports_ok", "notes",
+      "shift_boss", "pic", "gas_ch4", "gas_co", "gas_o2", "reentry_minutes"]),
     ("equipment-pannes", "equipment_pannes", EquipmentPanneCreate,
      ["equipment_id", "issue_type", "description", "reported_date", "reported_by", "status", "photo"]),
     ("mini-reports", "mini_reports", MiniReportCreate,
@@ -944,6 +997,27 @@ async def supervisor_alerts(current_user: dict = Depends(get_current_user)):
         async with db.execute("SELECT * FROM equipment_pannes WHERE status='open' ORDER BY created_at DESC LIMIT 20") as cur:
             pannes = rows_to_list(await cur.fetchall(), cur)
     return {"incidents": incidents, "pannes": pannes}
+
+class HSEReview(BaseModel):
+    decision: str  # approved | rejected
+
+
+@app.post("/api/hse-checklists/{item_id}/review")
+async def review_hse(item_id: str, body: HSEReview, current_user: dict = Depends(require_role("supervisor", "admin"))):
+    """Validation « Face Safe » par le superviseur : statut + auteur + date, cote serveur."""
+    if body.decision not in ("approved", "rejected"):
+        raise HTTPException(status_code=422, detail="Décision invalide")
+    async with database.connect() as db:
+        async with db.execute("SELECT 1 FROM hse_checklists WHERE id=?", (item_id,)) as cur:
+            if not await cur.fetchone():
+                raise HTTPException(status_code=404, detail="Déclaration introuvable")
+        await db.execute(
+            "UPDATE hse_checklists SET status=?, reviewed_by=?, reviewed_at=? WHERE id=?",
+            (body.decision, current_user.get("email"), datetime.now(timezone.utc).isoformat(), item_id),
+        )
+        await db.commit()
+    return {"message": "Déclaration mise à jour", "status": body.decision}
+
 
 # /api/sync a ete supprimee (audit) : elle inserait des noms de colonnes
 # fournis par le client dans le SQL (injection) et pouvait ecrire dans la
