@@ -12,7 +12,9 @@ from pathlib import Path
 
 import bcrypt
 
-DB = Path(os.environ.get("MINETRACK_DB_PATH") or Path(__file__).parent / "minetrack.db")
+import database
+
+DB = database.DB_PATH
 
 ACCOUNTS = [
     ("admin@minetrack.com", "admin123", "Administrateur", "admin"),
@@ -33,34 +35,45 @@ def ensure_accounts(db_path=DB, verbose=True):
     doivent jamais protéger un site accessible sur internet.
     """
     override = os.environ.get("MINETRACK_DEMO_PASSWORD")
-    conn = sqlite3.connect(db_path)
-    created = 0
+
+    # Postgres (Supabase, DATABASE_URL) ou SQLite (fichier db_path).
+    if database.IS_POSTGRES:
+        def exists(email, role):
+            return database.sync_fetchone("SELECT 1 FROM users WHERE email=? AND role=?", (email, role))
+    else:
+        conn = sqlite3.connect(db_path)
+
+        def exists(email, role):
+            return conn.execute("SELECT 1 FROM users WHERE email=? AND role=?", (email, role)).fetchone()
+
+    inserts = []
     try:
         for email, default_pwd, name, role in ACCOUNTS:
-            pwd = override or default_pwd
-            exists = conn.execute(
-                "SELECT 1 FROM users WHERE email=? AND role=?", (email, role)
-            ).fetchone()
-            if exists:
+            if exists(email, role):
                 continue
-            conn.execute(
+            pwd = override or default_pwd
+            inserts.append((
                 "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?,?,?,?,?,?)",
-                (str(uuid.uuid4()), email,
-                 bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(),
+                (str(uuid.uuid4()), email, bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(),
                  name, role, datetime.now(timezone.utc).isoformat()),
-            )
-            created += 1
+            ))
             if verbose:
                 shown = "<MINETRACK_DEMO_PASSWORD>" if override else pwd
                 print(f"  + {email} / {shown}  ({role})")
-        conn.commit()
+        if database.IS_POSTGRES:
+            database.sync_execute_many(inserts)
+        else:
+            for sql, params in inserts:
+                conn.execute(sql, params)
+            conn.commit()
     finally:
-        conn.close()
-    return created
+        if not database.IS_POSTGRES:
+            conn.close()
+    return len(inserts)
 
 
 def main():
-    if not DB.exists():
+    if not database.IS_POSTGRES and not DB.exists():
         print("[!] minetrack.db absente — démarre d'abord le backend une fois.")
         return
     created = ensure_accounts(DB)

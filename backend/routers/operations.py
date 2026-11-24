@@ -14,10 +14,11 @@ import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import database
 from auth_utils import get_current_user, require_role
 
 # Meme regle que server.py : MINETRACK_DB_PATH prime (ex. /tmp sur Vercel).
-DB_PATH = Path(os.environ.get("MINETRACK_DB_PATH") or Path(__file__).parent.parent / "minetrack.db")
+DB_PATH = database.DB_PATH  # utilise seulement en mode SQLite
 
 router = APIRouter(prefix="/api", tags=["operations"])
 
@@ -150,11 +151,12 @@ INDEXES = [
 
 async def init_operations_tables():
     """À appeler depuis le lifespan de server.py."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         for sql in TABLES.values():
             await db.execute(sql)
         for sql in INDEXES:
             await db.execute(sql)
+        await database.protect_tables(db, TABLES.keys())
         await db.commit()
 
 
@@ -228,7 +230,7 @@ class StockEntryCreate(BaseModel):
 # ───────────────────────────── Sites ─────────────────────────────
 @router.get("/sites")
 async def list_sites(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT * FROM sites WHERE active=1 ORDER BY name") as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -236,7 +238,7 @@ async def list_sites(current_user: dict = Depends(get_current_user)):
 @router.post("/sites")
 async def create_site(body: SiteCreate, current_user: dict = Depends(ADMIN)):
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT id FROM sites WHERE name=?", (body.name,)) as cur:
             if await cur.fetchone():
                 raise HTTPException(409, "Site déjà enregistré")
@@ -250,7 +252,7 @@ async def create_site(body: SiteCreate, current_user: dict = Depends(ADMIN)):
 
 @router.delete("/sites/{site_id}")
 async def deactivate_site(site_id: str, current_user: dict = Depends(ADMIN)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute("UPDATE sites SET active=0 WHERE id=?", (site_id,))
         await db.commit()
     return {"message": "Site désactivé"}
@@ -274,7 +276,7 @@ async def list_plans(
         args.append(period)
     sql += " GROUP BY p.id ORDER BY p.level, p.face"
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(sql, args) as cur:
             plans = rows_to_list(await cur.fetchall(), cur)
 
@@ -287,7 +289,7 @@ async def list_plans(
 @router.post("/monthly-plans")
 async def create_plan(body: MonthlyPlanCreate, current_user: dict = Depends(ADMIN)):
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         try:
             await db.execute(
                 """INSERT INTO monthly_plans
@@ -297,7 +299,7 @@ async def create_plan(body: MonthlyPlanCreate, current_user: dict = Depends(ADMI
                  body.planned_meters, now(), current_user.get("email")),
             )
             await db.commit()
-        except aiosqlite.IntegrityError:
+        except database.INTEGRITY_ERRORS:
             raise HTTPException(409, "Plan déjà défini pour ce front ce mois")
     return {"id": uid, **body.model_dump()}
 
@@ -305,9 +307,9 @@ async def create_plan(body: MonthlyPlanCreate, current_user: dict = Depends(ADMI
 # ───────────────────────────── Layouts ─────────────────────────────
 @router.get("/layouts")
 async def list_layouts(plan_id: str = Query(...), current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(
-            "SELECT * FROM layouts WHERE plan_id=? ORDER BY layout_date, rowid", (plan_id,)
+            "SELECT * FROM layouts WHERE plan_id=? ORDER BY layout_date, created_at", (plan_id,)
         ) as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -318,7 +320,7 @@ async def create_layout(
     current_user: dict = Depends(require_role("admin", "supervisor", "support")),
 ):
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(
             "SELECT planned_meters FROM monthly_plans WHERE id=?", (body.plan_id,)
         ) as cur:
@@ -357,7 +359,7 @@ async def list_machines(site_id: Optional[str] = None, current_user: dict = Depe
         sql += " WHERE site_id=?"
         args.append(site_id)
     sql += " ORDER BY machine_type, unit_number, machine_number"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(sql, args) as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -367,7 +369,7 @@ async def create_machine(body: MachineCreate, current_user: dict = Depends(ADMIN
     if body.status not in ("operational", "breakdown", "maintenance"):
         raise HTTPException(422, "Statut invalide")
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         try:
             await db.execute(
                 """INSERT INTO machines
@@ -377,7 +379,7 @@ async def create_machine(body: MachineCreate, current_user: dict = Depends(ADMIN
                  body.brand, body.status, now(), current_user.get("email")),
             )
             await db.commit()
-        except aiosqlite.IntegrityError:
+        except database.INTEGRITY_ERRORS:
             raise HTTPException(409, "Numéro de machine déjà utilisé")
     return {"id": uid, **body.model_dump()}
 
@@ -391,7 +393,7 @@ async def list_agents(site_id: Optional[str] = None, current_user: dict = Depend
         sql += " AND site_id=?"
         args.append(site_id)
     sql += " ORDER BY full_name"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(sql, args) as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -399,7 +401,7 @@ async def list_agents(site_id: Optional[str] = None, current_user: dict = Depend
 @router.post("/agents")
 async def create_agent(body: AgentCreate, current_user: dict = Depends(ADMIN)):
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         try:
             await db.execute(
                 """INSERT INTO agents (id, id_number, full_name, job_title, site_id, active, created_at, created_by)
@@ -408,14 +410,14 @@ async def create_agent(body: AgentCreate, current_user: dict = Depends(ADMIN)):
                  now(), current_user.get("email")),
             )
             await db.commit()
-        except aiosqlite.IntegrityError:
+        except database.INTEGRITY_ERRORS:
             raise HTTPException(409, "Id number déjà utilisé")
     return {"id": uid, **body.model_dump()}
 
 
 @router.delete("/agents/{agent_id}")
 async def deactivate_agent(agent_id: str, current_user: dict = Depends(ADMIN)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute("UPDATE agents SET active=0 WHERE id=?", (agent_id,))
         await db.commit()
     return {"message": "Agent désactivé"}
@@ -437,8 +439,8 @@ async def list_stock_entries(
         if val:
             sql += f" AND {col}=?"
             args.append(val)
-    sql += " ORDER BY report_date DESC, rowid DESC"
-    async with aiosqlite.connect(DB_PATH) as db:
+    sql += " ORDER BY report_date DESC, created_at DESC"
+    async with database.connect() as db:
         async with db.execute(sql, args) as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -453,7 +455,7 @@ async def create_stock_entry(
     if body.shift not in ("day", "night"):
         raise HTTPException(422, "Shift invalide")
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute(
             """INSERT INTO stock_entries
                (id, site_id, report_date, shift, category, material, consumption, final_stock, notes, created_at, created_by)
@@ -488,7 +490,7 @@ async def list_shift_reports(
             args.append(val)
     sql += " ORDER BY r.report_date DESC, r.shift, r.report_type"
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(sql, args) as cur:
             return rows_to_list(await cur.fetchall(), cur)
 
@@ -504,7 +506,7 @@ async def create_shift_report(
         raise HTTPException(422, "Shift invalide")
 
     uid = str(uuid.uuid4())
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute(
             """INSERT INTO shift_reports
                (id, site_id, report_date, shift, report_type, payload, created_at, created_by)
@@ -523,7 +525,7 @@ async def shift_reports_coverage(
 ):
     """Couverture des 9 rapports par site et par shift — vue 'Tous les rapports'."""
     day = report_date or date.today().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute(
             """SELECT s.id, s.name, r.shift, r.report_type
                FROM sites s LEFT JOIN shift_reports r

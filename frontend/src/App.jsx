@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { SharedDataProvider } from './contexts/SharedDataContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import RouteTracker from './components/RouteTracker';
 
 // Layouts chargés eagerly (utilisés à chaque navigation dans leur zone, petits)
 import Layout from './components/Layout';
@@ -69,6 +70,7 @@ function RouteFallback() {
 export default function App() {
   return (
     <BrowserRouter>
+      <RouteTracker />
       <AuthProvider>
         <SharedDataProvider>
           <ToastProvider>

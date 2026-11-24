@@ -26,6 +26,7 @@ from models import (
     EquipmentPanneCreate, MiniReportCreate,
     PtoCreate, FaceExaminationCreate, GroundSupportCreate
 )
+import database
 from routers import operations
 from auth_utils import (
     hash_password, verify_password,
@@ -37,7 +38,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 # Chemin de la base : backend/minetrack.db en local ; sur un hebergeur sans
 # disque inscriptible (Vercel), MINETRACK_DB_PATH=/tmp/minetrack.db.
-DB_PATH = Path(os.environ.get("MINETRACK_DB_PATH") or ROOT_DIR / "minetrack.db")
+DB_PATH = database.DB_PATH  # utilise seulement en mode SQLite
 
 # ─── Tables DDL ──────────────────────────────────────────────────────────────
 TABLES = {
@@ -350,7 +351,7 @@ TABLES = {
 
 
 async def get_db():
-    return await aiosqlite.connect(DB_PATH)
+    return await database.connect()
 
 
 def row_to_dict(row, cursor):
@@ -400,10 +401,12 @@ async def ensure_db():
     global _db_ready
     if _db_ready:
         return
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    async with aiosqlite.connect(DB_PATH) as db:
+    if not database.IS_POSTGRES:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with database.connect() as db:
         for sql in TABLES.values():
             await db.execute(sql)
+        await database.protect_tables(db, TABLES.keys())
         await db.commit()
     await operations.init_operations_tables()
     if os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
@@ -484,7 +487,7 @@ async def register(user_input: UserCreate, request: Request, response: Response)
         raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
     email = user_input.email.lower().strip()
     safe_role = "operator"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as cur:
             if await cur.fetchone():
                 raise HTTPException(status_code=400, detail="Email already registered")
@@ -506,7 +509,7 @@ async def login(user_input: UserLogin, request: Request, response: Response):
     key = (_client_ip(request), email)
     if len(_recent_failures(key)) >= LOGIN_MAX_FAILURES:
         raise HTTPException(status_code=429, detail="Trop de tentatives : réessayez dans 15 minutes")
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE email=?", (email,)) as cur:
             users = await cur.fetchall()
@@ -540,7 +543,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/supervisor/users")
 async def list_users(current_user: dict = Depends(require_role("supervisor", "admin"))):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC") as cur:
             rows = await cur.fetchall()
@@ -574,7 +577,7 @@ async def create_user(body: StaffCreate, current_user: dict = Depends(require_ro
         raise HTTPException(status_code=403, detail="Un superviseur ne peut pas créer ce rôle")
     uid = str(uuid.uuid4())
     created = datetime.now(timezone.utc).isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT 1 FROM users WHERE email=?", (email,)) as cur:
             if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
@@ -590,7 +593,7 @@ async def create_user(body: StaffCreate, current_user: dict = Depends(require_ro
 async def delete_user(user_id: str, current_user: dict = Depends(require_role("supervisor", "admin"))):
     if user_id == current_user.get("sub"):
         raise HTTPException(status_code=400, detail="Impossible de supprimer son propre compte")
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT role FROM users WHERE id=?", (user_id,)) as cur:
             target = await cur.fetchone()
         if not target:
@@ -606,7 +609,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_role("s
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 @app.get("/api/dashboard/stats")
 async def dashboard_stats(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async def count(table, where="1=1"):
             async with db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}") as c:
                 return (await c.fetchone())[0]
@@ -656,7 +659,7 @@ async def dashboard_stats(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/dashboard/charts")
 async def dashboard_charts(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT date, SUM(tonnage) as tonnage FROM production GROUP BY date ORDER BY date DESC LIMIT 14") as c:
             prod = [{"date": r[0], "tonnage": r[1]} for r in await c.fetchall()]
 
@@ -702,8 +705,8 @@ MANAGERS = require_role("admin", "supervisor")
 
 @app.get("/api/pegs")
 async def list_pegs(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT * FROM pegs ORDER BY rowid DESC LIMIT 200") as cur:
+    async with database.connect() as db:
+        async with db.execute("SELECT * FROM pegs ORDER BY created_at DESC LIMIT 200") as cur:
             rows = await cur.fetchall()
             return rows_to_list(rows, cur)
 
@@ -713,7 +716,7 @@ async def create_peg(body: PegCreate, current_user: dict = Depends(get_current_u
     uid = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     coords = json.dumps(body.coordinates) if body.coordinates else None
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute(
             "INSERT INTO pegs VALUES (?,?,?,?,?,?,?,?,?)",
             (uid, body.peg_id, body.zone, coords, body.status,
@@ -725,7 +728,7 @@ async def create_peg(body: PegCreate, current_user: dict = Depends(get_current_u
 
 @app.get("/api/pegs/{item_id}")
 async def get_peg(item_id: str, current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT * FROM pegs WHERE id=?", (item_id,)) as cur:
             row = await cur.fetchone()
             if not row:
@@ -739,7 +742,7 @@ async def update_peg(item_id: str, body: PegUpdate, current_user: dict = Depends
     if not updates:
         return {"message": "Nothing to update"}
     set_clause = ", ".join(f"{k}=?" for k in updates)
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute(f"UPDATE pegs SET {set_clause} WHERE id=?", (*updates.values(), item_id))
         await db.commit()
     return {"message": "Updated"}
@@ -747,7 +750,7 @@ async def update_peg(item_id: str, body: PegUpdate, current_user: dict = Depends
 
 @app.delete("/api/pegs/{item_id}")
 async def delete_peg(item_id: str, current_user: dict = Depends(MANAGERS)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         await db.execute("DELETE FROM pegs WHERE id=?", (item_id,))
         await db.commit()
     return {"message": "Deleted"}
@@ -759,8 +762,8 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
 
     @app.get(f"/api/{route_name}")
     async def list_items(current_user: dict = Depends(get_current_user)):
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(f"SELECT * FROM {table} ORDER BY rowid DESC LIMIT 200") as cur:
+        async with database.connect() as db:
+            async with db.execute(f"SELECT * FROM {table} ORDER BY created_at DESC LIMIT 200") as cur:
                 rows = await cur.fetchall()
                 return rows_to_list(rows, cur)
 
@@ -772,14 +775,14 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
         values = [uid] + [data.get(f) for f in fields] + [now, current_user.get("email")]
         placeholders = ",".join("?" for _ in range(len(values)))
         cols = "id," + ",".join(fields) + ",created_at,created_by"
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with database.connect() as db:
             await db.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)
             await db.commit()
         return {"id": uid, **data, "created_at": now}
 
     @app.get(f"/api/{route_name}/{{item_id}}")
     async def get_item(item_id: str, current_user: dict = Depends(get_current_user)):
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with database.connect() as db:
             async with db.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)) as cur:
                 row = await cur.fetchone()
                 if not row:
@@ -788,7 +791,7 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
 
     @app.delete(f"/api/{route_name}/{{item_id}}")
     async def delete_item(item_id: str, current_user: dict = Depends(MANAGERS)):
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with database.connect() as db:
             await db.execute(f"DELETE FROM {table} WHERE id=?", (item_id,))
             await db.commit()
         return {"message": "Deleted"}
@@ -799,7 +802,7 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
         if not updates:
             return {"message": "Nothing to update"}
         set_clause = ", ".join(f"{k}=?" for k in updates)
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with database.connect() as db:
             await db.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", (*updates.values(), item_id))
             await db.commit()
         return {"message": "Updated"}
@@ -851,7 +854,7 @@ for route_name, table, ModelClass, fields in MODULES_CONFIG:
 # ─── Reports ──────────────────────────────────────────────────────────────────
 @app.get("/api/reports/summary")
 async def reports_summary(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async def count(table, where="1=1"):
             async with db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}") as c:
                 return (await c.fetchone())[0]
@@ -893,7 +896,7 @@ async def reports_summary(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/supervisor/alerts")
 async def supervisor_alerts(current_user: dict = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with database.connect() as db:
         async with db.execute("SELECT * FROM incidents WHERE severity='high' OR severity='critical' ORDER BY created_at DESC LIMIT 20") as cur:
             incidents = rows_to_list(await cur.fetchall(), cur)
         async with db.execute("SELECT * FROM equipment_pannes WHERE status='open' ORDER BY created_at DESC LIMIT 20") as cur:

@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './i18n'
 import App from './App.jsx'
+import { initAnalytics } from './utils/analytics'
+
+// Google Analytics : ne fait rien si VITE_GA_MEASUREMENT_ID n'est pas defini.
+initAnalytics()
 
 // Mode offline réel : cache l'app shell pour un chargement sans réseau après la 1ère visite.
 // IMPORTANT : un nouveau SW (nouvelle version déployée) doit recharger la page tout seul,

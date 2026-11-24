@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from pathlib import Path
 
 import jwt
 import bcrypt
@@ -8,11 +7,6 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, Request, Depends
 
 JWT_ALGORITHM = "HS256"
-
-
-def _db_path() -> Path:
-    # Meme regle que server.py / operations.py.
-    return Path(os.environ.get("MINETRACK_DB_PATH") or Path(__file__).parent / "minetrack.db")
 
 
 def _account_still_valid(claims: dict) -> bool:
@@ -23,18 +17,15 @@ def _account_still_valid(claims: dict) -> bool:
     On compare email + role (et non l'id) : sur Vercel chaque instance a sa
     propre base /tmp ou les comptes de demo ont des id differents.
     """
+    import database  # import local : evite un cycle au chargement
     try:
-        conn = sqlite3.connect(_db_path())
-        try:
-            row = conn.execute(
-                "SELECT 1 FROM users WHERE email=? AND role=? LIMIT 1",
-                (claims.get("email"), claims.get("role")),
-            ).fetchone()
-        finally:
-            conn.close()
+        row = database.sync_fetchone(
+            "SELECT 1 FROM users WHERE email=? AND role=? LIMIT 1",
+            (claims.get("email"), claims.get("role")),
+        )
         return row is not None
-    except sqlite3.Error:
-        # Base pas encore initialisee : on ne bloque pas (ensure_db s'en charge).
+    except sqlite3.OperationalError:
+        # SQLite : table pas encore creee (ensure_db s'en charge) -> on ne bloque pas.
         return True
 
 
