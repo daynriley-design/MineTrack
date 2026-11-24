@@ -39,3 +39,4 @@ _sauvegarde_theme_sombre_src/
 frontend.zip
 
 .vercel
+backend/*.bak

@@ -14,3 +14,4 @@ _sauvegarde_theme_sombre_src
 .git
 frontend.zip
 START_MINETRACK.bat
+backend/*.bak
