@@ -26,11 +26,18 @@ ACCOUNTS = [
 
 
 def ensure_accounts(db_path=DB, verbose=True):
-    """Ajoute les comptes de démo absents. Renvoie le nombre de comptes créés."""
+    """Ajoute les comptes de démo absents. Renvoie le nombre de comptes créés.
+
+    MINETRACK_DEMO_PASSWORD (variable d'environnement, ex. sur Vercel) remplace
+    les mots de passe par défaut ci-dessus, qui sont publics (README) et ne
+    doivent jamais protéger un site accessible sur internet.
+    """
+    override = os.environ.get("MINETRACK_DEMO_PASSWORD")
     conn = sqlite3.connect(db_path)
     created = 0
     try:
-        for email, pwd, name, role in ACCOUNTS:
+        for email, default_pwd, name, role in ACCOUNTS:
+            pwd = override or default_pwd
             exists = conn.execute(
                 "SELECT 1 FROM users WHERE email=? AND role=?", (email, role)
             ).fetchone()
@@ -44,7 +51,8 @@ def ensure_accounts(db_path=DB, verbose=True):
             )
             created += 1
             if verbose:
-                print(f"  + {email} / {pwd}  ({role})")
+                shown = "<MINETRACK_DEMO_PASSWORD>" if override else pwd
+                print(f"  + {email} / {shown}  ({role})")
         conn.commit()
     finally:
         conn.close()

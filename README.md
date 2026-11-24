@@ -14,7 +14,7 @@ Application web full-stack de gestion et de suivi des opérations minières sout
 | Export | html2canvas + jsPDF | page Rapports |
 | Hors ligne | service worker + file d'attente | les mutations sont mises en file, jamais le login |
 
-> Aucune base MongoDB n'est utilisée : le backend est SQLite via `aiosqlite`, servi par `backend/server.py` (le seul entrypoint réel — `backend/main.py` est un refactor abandonné, ne pas le lancer).
+> Aucune base MongoDB n'est utilisée : le backend est SQLite via `aiosqlite`, servi par `backend/server.py` (seul point d'entrée ; l'ancien refactor `main.py` a été retiré lors de l'audit de sécurité).
 
 ## 🚀 Démarrage rapide
 
@@ -52,7 +52,9 @@ npm run dev                # port 4000
 
 ### Comptes
 
-Créés par `backend/create_accounts.py` (idempotent, relançable sans risque) :
+Créés par `backend/create_accounts.py` (idempotent, relançable sans risque). Sur la page de connexion, le rôle pré-remplit l'email ; le mot de passe se saisit.
+
+> ⚠️ Ces mots de passe sont publics : ils ne servent **qu'en local**. Sur un site accessible depuis internet (Vercel), définir la variable `MINETRACK_DEMO_PASSWORD` : elle remplace le mot de passe de tous les comptes de démo.
 
 | Rôle | Email | Mot de passe | Page d'arrivée |
 |------|-------|---------------|-----------------|

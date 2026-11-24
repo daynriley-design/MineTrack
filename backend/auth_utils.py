@@ -1,10 +1,41 @@
 import os
+import sqlite3
+from pathlib import Path
+
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, Request, Depends
 
 JWT_ALGORITHM = "HS256"
+
+
+def _db_path() -> Path:
+    # Meme regle que server.py / operations.py.
+    return Path(os.environ.get("MINETRACK_DB_PATH") or Path(__file__).parent / "minetrack.db")
+
+
+def _account_still_valid(claims: dict) -> bool:
+    """Le compte du jeton existe-t-il encore avec ce role ?
+
+    Un compte supprime (ou dont le role a change) perd sa session tout de
+    suite, au lieu de rester valide jusqu'a l'expiration du jeton (24 h).
+    On compare email + role (et non l'id) : sur Vercel chaque instance a sa
+    propre base /tmp ou les comptes de demo ont des id differents.
+    """
+    try:
+        conn = sqlite3.connect(_db_path())
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM users WHERE email=? AND role=? LIMIT 1",
+                (claims.get("email"), claims.get("role")),
+            ).fetchone()
+        finally:
+            conn.close()
+        return row is not None
+    except sqlite3.Error:
+        # Base pas encore initialisee : on ne bloque pas (ensure_db s'en charge).
+        return True
 
 
 def get_jwt_secret() -> str:
@@ -52,7 +83,10 @@ async def get_current_user(request: Request):
             token = auth_header[7:]
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return decode_token(token)
+    claims = decode_token(token)
+    if not _account_still_valid(claims):
+        raise HTTPException(status_code=401, detail="Compte supprimé ou modifié")
+    return claims
 
 
 def require_role(*allowed_roles: str):

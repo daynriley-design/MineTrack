@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 from models import (
     UserCreate, UserLogin,
@@ -544,6 +545,45 @@ async def list_users(current_user: dict = Depends(require_role("supervisor", "ad
         async with db.execute("SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC") as cur:
             rows = await cur.fetchall()
             return [{"id": r["id"], "email": r["email"], "name": r["name"], "role": r["role"], "created_at": r["created_at"]} for r in rows]
+
+
+ALL_ROLES = {"admin", "management", "supervisor", "logistique", "support", "geologist", "operator"}
+# Ce qu'un superviseur a le droit de creer (jamais admin / management / superviseur).
+SUPERVISOR_CREATABLE = {"operator", "geologist", "logistique", "support"}
+
+
+class StaffCreate(BaseModel):
+    email: str
+    name: str
+    role: str
+    password: str
+
+
+@app.post("/api/supervisor/users")
+async def create_user(body: StaffCreate, current_user: dict = Depends(require_role("supervisor", "admin"))):
+    email = body.email.lower().strip()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="Email invalide")
+    if not body.name.strip():
+        raise HTTPException(status_code=422, detail="Nom requis")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
+    if body.role not in ALL_ROLES:
+        raise HTTPException(status_code=422, detail="Rôle inconnu")
+    if current_user.get("role") != "admin" and body.role not in SUPERVISOR_CREATABLE:
+        raise HTTPException(status_code=403, detail="Un superviseur ne peut pas créer ce rôle")
+    uid = str(uuid.uuid4())
+    created = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT 1 FROM users WHERE email=?", (email,)) as cur:
+            if await cur.fetchone():
+                raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
+        await db.execute(
+            "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?,?,?,?,?,?)",
+            (uid, email, hash_password(body.password), body.name.strip(), body.role, created),
+        )
+        await db.commit()
+    return {"id": uid, "email": email, "name": body.name.strip(), "role": body.role, "created_at": created}
 
 
 @app.delete("/api/supervisor/users/{user_id}")

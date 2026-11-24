@@ -5,14 +5,15 @@ import { ChevronDown, Loader2, WifiOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ensureLocaleLoaded } from '../i18n';
 
-// Comptes de démonstration (cf. backend/create_accounts.py) — un clic sur un
-// rôle connecte directement avec son compte, sans saisie manuelle.
-const DEMO_CREDENTIALS = {
-  admin: { email: 'admin@minetrack.com', password: 'admin123' },
-  management: { email: 'management@minetrack.com', password: 'mgmt123' },
-  supervisor: { email: 'supervision@minetrack.com', password: 'super123' },
-  logistique: { email: 'logistique@minetrack.com', password: 'logi123' },
-  support: { email: 'support@minetrack.com', password: 'support123' },
+// Raccourcis de rôle : ils pré-remplissent seulement l'EMAIL du compte.
+// Aucun mot de passe n'est embarqué dans la page (audit : avant, n'importe
+// qui pouvait se connecter en admin d'un clic sur le site public).
+const ROLE_EMAILS = {
+  admin: 'admin@minetrack.com',
+  management: 'management@minetrack.com',
+  supervisor: 'supervision@minetrack.com',
+  logistique: 'logistique@minetrack.com',
+  support: 'support@minetrack.com',
 };
 
 const LANGUAGES = [
@@ -72,6 +73,16 @@ box-shadow:0 6px 16px rgba(238, 155, 95,.22);cursor:pointer;transition:filter .1
 .login__role:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px)}
 .login__role:disabled{opacity:.7;cursor:not-allowed}
 .login__role:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.login__hint{margin:0 0 .75rem;font-size:.85rem;color:var(--muted);text-align:center}
+.login__chips{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin-bottom:1.1rem}
+.login__chip{border:0;border-radius:999px;padding:.45rem .85rem;background:#F4F5F7;color:var(--txt);font:inherit;font-size:.85rem;cursor:pointer}
+.login__chip:hover{background:#ECEDF0}
+.login__chip.is-active{background:#FFF1E6;color:#A65218;font-weight:600}
+.login__form{display:grid;gap:.4rem}
+.login__form label{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+.login__form input{width:100%;padding:.75rem .9rem;border:1px solid transparent;border-radius:12px;background:#F7F8FA;color:var(--txt);font:inherit;font-size:.95rem;outline:none}
+.login__form input:focus{background:#fff;border-color:var(--ore);box-shadow:0 0 0 3px rgba(238,155,95,.2)}
+.login__form .login__role{margin-top:.9rem}
 .login__error{margin:1rem 0 0;font-size:.82rem;color:#DC2626;display:flex;align-items:center;gap:.4rem}
 .login__spin{animation:login-spin .9s linear infinite}
 @keyframes login-spin{to{transform:rotate(360deg)}}
@@ -85,7 +96,10 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [loadingRole, setLoadingRole] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
 
@@ -106,24 +120,34 @@ export default function LoginPage() {
     try { localStorage.setItem('i18nextLng', code); } catch { /* storage unavailable */ }
   };
 
-  const loginAsRole = async (roleKey) => {
+  const pickRole = (roleKey) => {
+    setRole(roleKey);
+    setEmail(ROLE_EMAILS[roleKey]);
+    setError('');
+    setTimeout(() => document.getElementById('login-password')?.focus(), 0);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
     setError('');
     if (!online) {
       setError(t('login.offline_error'));
       return;
     }
-    setLoadingRole(roleKey);
+    setBusy(true);
     try {
-      const user = await login(DEMO_CREDENTIALS[roleKey]);
+      const user = await login({ email: email.trim(), password });
       navigate(HOME_BY_ROLE[user.role] || '/');
     } catch (err) {
+      const status = err?.response?.status;
       setError(
-        err?.response?.status === 401
-          ? t('login.error_invalid')
-          : t('login.error_server')
+        status === 401 ? t('login.error_invalid')
+          : status === 429 ? 'Trop de tentatives : réessayez dans 15 minutes.'
+            : t('login.error_server')
       );
+      setPassword('');
     } finally {
-      setLoadingRole(null);
+      setBusy(false);
     }
   };
 
@@ -148,15 +172,28 @@ export default function LoginPage() {
             <em>{t('login.brand_subtitle')}</em>
           </header>
 
-          <nav className="login__roles" aria-label={t('login.demo_title')}>
+          <p className="login__hint">Choisissez votre rôle, puis saisissez votre mot de passe.</p>
+          <nav className="login__chips" aria-label={t('login.demo_title')}>
             {ROLES.map((r) => (
-              <button key={r.key} type="button" disabled={!!loadingRole || !online}
-                className="login__role"
-                onClick={() => loginAsRole(r.key)}>
-                {loadingRole === r.key && <Loader2 size={18} className="login__spin" />} {t(r.labelKey)}
+              <button key={r.key} type="button" aria-pressed={role === r.key}
+                className={`login__chip${role === r.key ? ' is-active' : ''}`}
+                onClick={() => pickRole(r.key)}>
+                {t(r.labelKey)}
               </button>
             ))}
           </nav>
+
+          <form className="login__form" onSubmit={submit}>
+            <label htmlFor="login-email">Email</label>
+            <input id="login-email" type="email" autoComplete="username" required value={email}
+              onChange={(e) => { setEmail(e.target.value); setRole(null); }} />
+            <label htmlFor="login-password">Mot de passe</label>
+            <input id="login-password" type="password" autoComplete="current-password" required value={password}
+              onChange={(e) => setPassword(e.target.value)} />
+            <button type="submit" className="login__role" disabled={busy || !online}>
+              {busy && <Loader2 size={18} className="login__spin" />} Se connecter
+            </button>
+          </form>
 
           {!online && (
             <p className="login__error" role="status"><WifiOff size={15} /> {t('login.offline_banner')}</p>
