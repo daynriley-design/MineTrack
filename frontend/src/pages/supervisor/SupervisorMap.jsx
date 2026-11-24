@@ -23,7 +23,7 @@ const LEGEND = [
   { shape: '⬡', label: 'Échantillon', color: '#a78bfa' },
   { shape: '🔴', label: 'Alerte', color: '#ef4444' },
   { shape: '⚠️', label: 'Panne', color: '#f59e0b' },
-  { shape: '📍', label: 'Ma position', color: '#f97316' },
+  { shape: '📍', label: 'Ma position', color: '#EE9B5F' },
 ];
 
 export default function SupervisorMap() {
@@ -93,14 +93,14 @@ export default function SupervisorMap() {
           {/* Grid lines */}
           <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.12 }}>
             {[...Array(12)].map((_, i) => (
-              <line key={`v${i}`} x1={`${(i + 1) * 8.33}%`} y1="0" x2={`${(i + 1) * 8.33}%`} y2="100%" stroke="#f97316" strokeWidth="0.5" />
+              <line key={`v${i}`} x1={`${(i + 1) * 8.33}%`} y1="0" x2={`${(i + 1) * 8.33}%`} y2="100%" stroke="#EE9B5F" strokeWidth="0.5" />
             ))}
             {[...Array(8)].map((_, i) => (
-              <line key={`h${i}`} x1="0" y1={`${(i + 1) * 12.5}%`} x2="100%" y2={`${(i + 1) * 12.5}%`} stroke="#f97316" strokeWidth="0.5" />
+              <line key={`h${i}`} x1="0" y1={`${(i + 1) * 12.5}%`} x2="100%" y2={`${(i + 1) * 12.5}%`} stroke="#EE9B5F" strokeWidth="0.5" />
             ))}
-            <circle cx="50%" cy="50%" r="30%" fill="none" stroke="#f97316" strokeWidth="0.5" />
-            <circle cx="50%" cy="50%" r="20%" fill="none" stroke="#f97316" strokeWidth="0.5" />
-            <circle cx="50%" cy="50%" r="10%" fill="none" stroke="#f97316" strokeWidth="0.5" />
+            <circle cx="50%" cy="50%" r="30%" fill="none" stroke="#EE9B5F" strokeWidth="0.5" />
+            <circle cx="50%" cy="50%" r="20%" fill="none" stroke="#EE9B5F" strokeWidth="0.5" />
+            <circle cx="50%" cy="50%" r="10%" fill="none" stroke="#EE9B5F" strokeWidth="0.5" />
           </svg>
 
           {/* Elevation contours */}
@@ -111,10 +111,10 @@ export default function SupervisorMap() {
           </svg>
 
           {/* Corner label */}
-          <div style={{ position: 'absolute', top: '1rem', left: '1rem', fontFamily: 'monospace', fontSize: '0.7rem', color: 'rgba(249,115,22,0.5)', letterSpacing: '0.1em' }}>
+          <div style={{ position: 'absolute', top: '1rem', left: '1rem', fontFamily: 'monospace', fontSize: '0.7rem', color: 'rgba(238, 155, 95,0.5)', letterSpacing: '0.1em' }}>
             MPAMA NORTH · UTM 35S · SECTEUR A
           </div>
-          <div style={{ position: 'absolute', bottom: '1rem', right: '1rem', fontFamily: 'monospace', fontSize: '0.65rem', color: 'rgba(249,115,22,0.4)' }}>
+          <div style={{ position: 'absolute', bottom: '1rem', right: '1rem', fontFamily: 'monospace', fontSize: '0.65rem', color: 'rgba(238, 155, 95,0.4)' }}>
             ÉCHELLE 1:5000
           </div>
 
@@ -157,7 +157,7 @@ export default function SupervisorMap() {
           })}
 
           {/* My position */}
-          <div style={{ position: 'absolute', left: '50%', top: '15%', transform: 'translate(-50%, -50%)', fontSize: '1.2rem', filter: 'drop-shadow(0 0 6px #f97316)' }}>
+          <div style={{ position: 'absolute', left: '50%', top: '15%', transform: 'translate(-50%, -50%)', fontSize: '1.2rem', filter: 'drop-shadow(0 0 6px #EE9B5F)' }}>
             📍
           </div>
 

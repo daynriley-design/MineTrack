@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 
-const COLORS = ['#F97316', '#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444'];
+const COLORS = ['#EE9B5F', '#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444'];
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -69,7 +69,7 @@ export default function DashboardPage() {
     },
     {
       key: 'production.today_tonnage', label: t('kpi.tonnage'), icon: Package,
-      color: 'var(--color-ore)', bg: 'rgba(249,115,22,0.12)',
+      color: 'var(--color-ore)', bg: 'rgba(238, 155, 95,0.12)',
       format: (v) => v?.toLocaleString('fr-FR')
     },
     {
@@ -99,8 +99,8 @@ export default function DashboardPage() {
     <div>
       {/* Welcome banner */}
       <div style={{
-        background: 'linear-gradient(135deg, var(--color-rock-2) 0%, rgba(249,115,22,0.1) 100%)',
-        border: '1px solid rgba(249,115,22,0.2)',
+        background: 'linear-gradient(135deg, var(--color-rock-2) 0%, rgba(238, 155, 95,0.1) 100%)',
+        border: '1px solid rgba(238, 155, 95,0.2)',
         borderRadius: 'var(--radius-lg)',
         padding: '1.5rem 2rem',
         marginBottom: '1.5rem',
@@ -174,10 +174,10 @@ export default function DashboardPage() {
                   type="monotone"
                   dataKey="tonnage"
                   name="Tonnage (t)"
-                  stroke="#F97316"
+                  stroke="#EE9B5F"
                   strokeWidth={2.5}
                   dot={false}
-                  activeDot={{ r: 5, fill: '#F97316' }}
+                  activeDot={{ r: 5, fill: '#EE9B5F' }}
                 />
               </LineChart>
             </ResponsiveContainer>

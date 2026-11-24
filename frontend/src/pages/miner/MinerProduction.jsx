@@ -13,7 +13,7 @@ export default function MinerProduction() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <div style={{ padding: '0.5rem', background: 'rgba(249, 115, 22, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--color-ore)' }}>
+        <div style={{ padding: '0.5rem', background: 'rgba(238, 155, 95, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--color-ore)' }}>
           <Truck size={24} />
         </div>
         <h3 style={{ margin: 0, color: 'var(--color-white)', fontWeight: 700 }}>Saisie Production</h3>
@@ -48,7 +48,7 @@ export default function MinerProduction() {
             color: 'white', border: 'none', borderRadius: 'var(--radius-md)', 
             fontWeight: 700, fontSize: '1rem', cursor: 'pointer',
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
-            boxShadow: '0 4px 12px rgba(249, 115, 22, 0.3)', transition: 'all 0.2s ease'
+            boxShadow: '0 4px 12px rgba(238, 155, 95, 0.3)', transition: 'all 0.2s ease'
           }}>
             <Save size={20} />
             Enregistrer le Voyage

@@ -5,14 +5,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
 const CSS = `
-.ssr{--ore:#f26a1b;--ore-hot:#ff8a2b;--panel:#FFFFFF;--line:#ECEDF0;--txt:#2A2C31;--muted:#8B8E95;
+.ssr{--ore:#EE9B5F;--ore-hot:#F6C29A;--panel:#FFFFFF;--line:#ECEDF0;--txt:#2A2C31;--muted:#8B8E95;
 color:var(--txt);font-family:'Inter',system-ui,sans-serif}
 .ssr h1{margin:0 0 .35rem;font-size:1.4rem}
 .ssr__sub{margin:0 0 1.5rem;color:var(--muted);font-size:.85rem}
 .ssr__tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.6rem;margin-bottom:1.5rem;max-width:64rem}
 .ssr__tab{padding:.75rem .9rem;border:1px solid var(--line);border-radius:9px;background:#F7F8FA;color:var(--txt);
 font-size:.85rem;font-weight:600;cursor:pointer;text-align:left}
-.ssr__tab.is-active{background:linear-gradient(180deg,var(--ore-hot),var(--ore));color:#FFFFFF;border-color:#ffb37a}
+.ssr__tab.is-active{background:linear-gradient(180deg,var(--ore-hot),var(--ore));color:#3F1F08;border-color:#F6CBA8}
 .ssr__bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:1rem;max-width:46rem;margin-bottom:1.5rem}
 .ssr__bar label{display:block;font-size:.76rem;color:var(--muted);margin-bottom:.3rem}
 .ssr__bar input,.ssr__bar select{width:100%;padding:.6rem .7rem;border:1px solid var(--line);border-radius:7px;
@@ -37,7 +37,7 @@ font-size:.82rem;line-height:1.6}
 border-radius:7px;background:#F7F8FA;color:var(--txt);font-size:.9rem;font-family:inherit}
 .ssr__field textarea{min-height:5rem;resize:vertical}
 .ssr__submit{margin-top:.5rem;display:inline-flex;align-items:center;gap:.5rem;padding:.65rem 1.2rem;border:0;
-border-radius:7px;background:linear-gradient(180deg,var(--ore-hot),var(--ore));color:#FFFFFF;font-weight:700;
+border-radius:7px;background:linear-gradient(180deg,var(--ore-hot),var(--ore));color:#3F1F08;font-weight:700;
 font-size:.9rem;cursor:pointer}
 .ssr__submit:disabled{opacity:.55;cursor:not-allowed}
 .ssr__spin{animation:ssr-spin .9s linear infinite}

@@ -82,7 +82,7 @@ export default function MinerPegs() {
             color: 'white', border: 'none', borderRadius: 'var(--radius-md)',
             fontWeight: 700, fontSize: '1rem', cursor: isSending ? 'wait' : 'pointer', opacity: isSending ? 0.7 : 1,
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
-            boxShadow: '0 4px 12px rgba(249, 115, 22, 0.3)', transition: 'all 0.2s ease'
+            boxShadow: '0 4px 12px rgba(238, 155, 95, 0.3)', transition: 'all 0.2s ease'
           }}>
             <Save size={20} />
             Enregistrer l'avancement

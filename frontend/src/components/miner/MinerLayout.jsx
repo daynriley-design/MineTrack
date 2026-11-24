@@ -58,7 +58,7 @@ export default function MinerLayout() {
             width: '40px', height: '40px',
             background: 'linear-gradient(135deg, var(--color-ore), var(--color-gold))',
             borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', boxShadow: '0 4px 15px rgba(249, 115, 22, 0.35)'
+            color: 'white', boxShadow: '0 4px 15px rgba(238, 155, 95, 0.35)'
           }}>
             <Pickaxe size={22} />
           </div>
@@ -95,7 +95,7 @@ export default function MinerLayout() {
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-rock-3)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <LanguageSwitcher style={{ width: '100%' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(249,115,22,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(238, 155, 95,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <UserCircle size={20} color="var(--color-ore)" />
             </div>
             <div>

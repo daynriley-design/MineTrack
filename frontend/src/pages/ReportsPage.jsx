@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-const COLORS = ['#F97316', '#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
+const COLORS = ['#EE9B5F', '#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -185,7 +185,7 @@ export default function ReportsPage() {
           {[
             {
               label: t('reports.total_pegs'), value: summary?.pegs_summary?.total ?? 0,
-              color: 'var(--color-ore)', bg: 'rgba(249,115,22,0.12)'
+              color: 'var(--color-ore)', bg: 'rgba(238, 155, 95,0.12)'
             },
             {
               label: t('reports.total_tonnage'),
@@ -275,7 +275,7 @@ export default function ReportsPage() {
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={hseBySeverity} cx="50%" cy="50%" outerRadius={80} paddingAngle={3} dataKey="value">
-                    {hseBySeverity.map((_, i) => <Cell key={i} fill={['#3B82F6', '#F59E0B', '#F97316', '#EF4444'][i % 4]} />)}
+                    {hseBySeverity.map((_, i) => <Cell key={i} fill={['#3B82F6', '#F59E0B', '#EE9B5F', '#EF4444'][i % 4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
                 </PieChart>
@@ -283,7 +283,7 @@ export default function ReportsPage() {
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.5rem' }}>
                 {hseBySeverity.map((e, i) => (
                   <span key={e.name} style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: ['#3B82F6', '#F59E0B', '#F97316', '#EF4444'][i % 4], display: 'inline-block' }}></span>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: ['#3B82F6', '#F59E0B', '#EE9B5F', '#EF4444'][i % 4], display: 'inline-block' }}></span>
                     {e.name}: <strong style={{ color: 'var(--color-white)' }}>{e.value}</strong>
                   </span>
                 ))}
