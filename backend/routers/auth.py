@@ -11,9 +11,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Comptes démo : seedés uniquement si ENV=dev, jamais en prod
 DEMO_ACCOUNTS = [
-    ("daynriley@gmail.com", "123", "Superviseur Alpha", "supervisor"),
-    ("daynriley@gmail.com", "1234", "Géologue Expert", "geologist"),
-    ("daynriley@gmail.com", "12345", "Mineur 101", "operator"),
+    ("seed@minetrack.local", "123", "Superviseur Alpha", "supervisor"),
+    ("seed@minetrack.local", "1234", "Géologue Expert", "geologist"),
+    ("seed@minetrack.local", "12345", "Mineur 101", "operator"),
 ]
 
 

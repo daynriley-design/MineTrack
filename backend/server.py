@@ -441,15 +441,48 @@ app.include_router(operations.router)
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
-# Rôles auto-inscriptibles publiquement. 'admin' exclu volontairement :
-# un compte admin ne doit jamais être créé via le formulaire public.
-SELF_REGISTER_ROLES = {"operator", "geologist", "supervisor"}
+# Inscription publique : FERMEE par defaut (audit). Avant, n'importe qui
+# pouvait s'inscrire « supervisor » puis lister/supprimer tous les comptes.
+# MINETRACK_ALLOW_REGISTER=1 la rouvre, uniquement pour le role operateur.
+SELF_REGISTER_ROLES = {"operator"}
+
+# Limite anti force brute sur /login : N echecs par (IP, email) sur la fenetre.
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW_SECONDS = 15 * 60
+_login_failures: dict = {}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
+
+
+def _is_https(request: Request) -> bool:
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    return proto.split(",")[0].strip() == "https"
+
+
+def _set_session_cookie(response: Response, request: Request, token: str):
+    # secure=True en HTTPS (Vercel) : le cookie ne part jamais en clair.
+    response.set_cookie("access_token", token, httponly=True, samesite="lax",
+                        secure=_is_https(request), max_age=86400)
+
+
+def _recent_failures(key) -> list:
+    cutoff = datetime.now(timezone.utc).timestamp() - LOGIN_WINDOW_SECONDS
+    attempts = [t for t in _login_failures.get(key, []) if t > cutoff]
+    _login_failures[key] = attempts
+    return attempts
 
 
 @app.post("/api/auth/register")
-async def register(user_input: UserCreate, response: Response):
-    email = user_input.email.lower()
-    safe_role = user_input.role if user_input.role in SELF_REGISTER_ROLES else "operator"
+async def register(user_input: UserCreate, request: Request, response: Response):
+    if os.environ.get("MINETRACK_ALLOW_REGISTER") != "1":
+        raise HTTPException(status_code=403, detail="Inscription désactivée : demandez un compte à l'administrateur")
+    if len(user_input.password or "") < 8:
+        raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
+    email = user_input.email.lower().strip()
+    safe_role = "operator"
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as cur:
             if await cur.fetchone():
@@ -462,13 +495,16 @@ async def register(user_input: UserCreate, response: Response):
         )
         await db.commit()
     token = create_access_token({"sub": uid, "email": email, "role": safe_role, "name": user_input.name})
-    response.set_cookie("access_token", token, httponly=True, samesite="lax", max_age=86400)
+    _set_session_cookie(response, request, token)
     return {"message": "Registered", "email": email, "role": safe_role, "name": user_input.name}
 
 
 @app.post("/api/auth/login")
-async def login(user_input: UserLogin, response: Response):
-    email = user_input.email.lower()
+async def login(user_input: UserLogin, request: Request, response: Response):
+    email = user_input.email.lower().strip()
+    key = (_client_ip(request), email)
+    if len(_recent_failures(key)) >= LOGIN_MAX_FAILURES:
+        raise HTTPException(status_code=429, detail="Trop de tentatives : réessayez dans 15 minutes")
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE email=?", (email,)) as cur:
@@ -481,16 +517,18 @@ async def login(user_input: UserLogin, response: Response):
             break
 
     if not valid_user:
+        _login_failures.setdefault(key, []).append(datetime.now(timezone.utc).timestamp())
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+    _login_failures.pop(key, None)
+
     token = create_access_token({"sub": valid_user["id"], "email": email, "role": valid_user["role"], "name": valid_user["name"]})
-    response.set_cookie("access_token", token, httponly=True, samesite="lax", max_age=86400)
+    _set_session_cookie(response, request, token)
     return {"message": "Login successful", "email": email, "role": valid_user["role"], "name": valid_user["name"]}
 
 
 @app.post("/api/auth/logout")
-async def logout(response: Response):
-    response.delete_cookie("access_token")
+async def logout(request: Request, response: Response):
+    response.delete_cookie("access_token", httponly=True, samesite="lax", secure=_is_https(request))
     return {"message": "Logged out"}
 
 
@@ -510,7 +548,16 @@ async def list_users(current_user: dict = Depends(require_role("supervisor", "ad
 
 @app.delete("/api/supervisor/users/{user_id}")
 async def delete_user(user_id: str, current_user: dict = Depends(require_role("supervisor", "admin"))):
+    if user_id == current_user.get("sub"):
+        raise HTTPException(status_code=400, detail="Impossible de supprimer son propre compte")
     async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT role FROM users WHERE id=?", (user_id,)) as cur:
+            target = await cur.fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+        # Un superviseur ne peut pas supprimer un administrateur.
+        if target[0] == "admin" and current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Seul un administrateur peut supprimer un administrateur")
         await db.execute("DELETE FROM users WHERE id=?", (user_id,))
         await db.commit()
     return {"message": "User deleted"}
@@ -607,7 +654,12 @@ async def dashboard_charts(current_user: dict = Depends(get_current_user)):
     }
 
 
-# ─── Pegs ─────────────────────────────────────────────────────────────────────
+# Modifier / supprimer des donnees metier : admin et superviseur uniquement.────────────────────────────────────────────────────────────────
+# Modifier / supprimer des donnees metier : admin et superviseur uniquement.
+# (Avant : tout compte connecte, ex. un operateur pouvait effacer les finances.)
+MANAGERS = require_role("admin", "supervisor")
+
+
 @app.get("/api/pegs")
 async def list_pegs(current_user: dict = Depends(get_current_user)):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -642,7 +694,7 @@ async def get_peg(item_id: str, current_user: dict = Depends(get_current_user)):
 
 
 @app.put("/api/pegs/{item_id}")
-async def update_peg(item_id: str, body: PegUpdate, current_user: dict = Depends(get_current_user)):
+async def update_peg(item_id: str, body: PegUpdate, current_user: dict = Depends(MANAGERS)):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         return {"message": "Nothing to update"}
@@ -654,7 +706,7 @@ async def update_peg(item_id: str, body: PegUpdate, current_user: dict = Depends
 
 
 @app.delete("/api/pegs/{item_id}")
-async def delete_peg(item_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_peg(item_id: str, current_user: dict = Depends(MANAGERS)):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM pegs WHERE id=?", (item_id,))
         await db.commit()
@@ -695,14 +747,14 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
                 return row_to_dict(row, cur)
 
     @app.delete(f"/api/{route_name}/{{item_id}}")
-    async def delete_item(item_id: str, current_user: dict = Depends(get_current_user)):
+    async def delete_item(item_id: str, current_user: dict = Depends(MANAGERS)):
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(f"DELETE FROM {table} WHERE id=?", (item_id,))
             await db.commit()
         return {"message": "Deleted"}
 
     @app.put(f"/api/{route_name}/{{item_id}}")
-    async def update_item(item_id: str, body: dict, current_user: dict = Depends(get_current_user)):
+    async def update_item(item_id: str, body: dict, current_user: dict = Depends(MANAGERS)):
         updates = {k: v for k, v in body.items() if k in fields}
         if not updates:
             return {"message": "Nothing to update"}
@@ -808,53 +860,10 @@ async def supervisor_alerts(current_user: dict = Depends(get_current_user)):
             pannes = rows_to_list(await cur.fetchall(), cur)
     return {"incidents": incidents, "pannes": pannes}
 
-from typing import List, Dict, Any
-from pydantic import BaseModel
-
-class SyncPayload(BaseModel):
-    collection: str
-    data: List[Dict[str, Any]]
-
-@app.post("/api/sync")
-async def sync_data(payloads: List[SyncPayload], current_user: dict = Depends(get_current_user)):
-    # Simple offline sync approach: insert all records as new or replace by ID
-    # In a real scenario, handle conflict resolution.
-    now = datetime.now(timezone.utc).isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        for p in payloads:
-            table = p.collection
-            # Only allow defined tables
-            if table not in TABLES:
-                continue
-            for item in p.data:
-                # Remove _id if it's there
-                item_id = item.pop('_id', None) or str(uuid.uuid4())
-                item['id'] = item_id
-                if 'created_at' not in item:
-                    item['created_at'] = now
-                if 'created_by' not in item:
-                    item['created_by'] = current_user.get("email")
-                
-                # Check if exists
-                async with db.execute(f"SELECT id FROM {table} WHERE id=?", (item_id,)) as cur:
-                    exists = await cur.fetchone()
-                
-                cols = list(item.keys())
-                vals = list(item.values())
-                
-                if exists:
-                    # Update
-                    set_clause = ", ".join(f"{c}=?" for c in cols if c != "id")
-                    update_vals = [v for k, v in item.items() if k != "id"]
-                    if set_clause:
-                        await db.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", (*update_vals, item_id))
-                else:
-                    # Insert
-                    placeholders = ", ".join("?" for _ in cols)
-                    col_str = ", ".join(cols)
-                    await db.execute(f"INSERT INTO {table} ({col_str}) VALUES ({placeholders})", vals)
-        await db.commit()
-    return {"message": "Sync successful"}
+# /api/sync a ete supprimee (audit) : elle inserait des noms de colonnes
+# fournis par le client dans le SQL (injection) et pouvait ecrire dans la
+# table users (creation d'un compte admin). Le frontend ne l'utilisait pas :
+# la file hors-ligne rejoue les requetes normales (utils/offlineSync.js).
 
 if __name__ == "__main__":
     import uvicorn

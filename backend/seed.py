@@ -42,7 +42,7 @@ async def seed_data():
                 json.dumps({"lat": -10.71 + i * 0.01, "lng": 25.47 + i * 0.01}), # Katanga coordinates approx
                 statuses[i % len(statuses)],
                 (datetime.now() - timedelta(days=i * 5)).strftime("%Y-%m-%d"),
-                f"Peg dans {zones[i % len(zones)]}", now(), "daynriley@gmail.com"
+                f"Peg dans {zones[i % len(zones)]}", now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO pegs (id, peg_id, zone, coordinates, status, date_installed, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -61,7 +61,7 @@ async def seed_data():
                 "in_progress" if i % 3 != 0 else "completed",
                 (datetime.now() - timedelta(days=i * 3)).strftime("%Y-%m-%d"),
                 datetime.now().strftime("%Y-%m-%d") if i % 3 == 0 else None,
-                f"Avancement activité {i}", now(), "daynriley@gmail.com"
+                f"Avancement activité {i}", now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO work_progress (id, peg_id, activity, team, progress_percent, status, start_date, end_date, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -80,7 +80,7 @@ async def seed_data():
                 "completed" if i < 15 else "in_progress",
                 (datetime.now() - timedelta(days=i * 2)).strftime("%Y-%m-%d"),
                 ["Kofi Mutombo", "Ibrahim Kabila", "Yao Tshisekedi"][i % 3],
-                f"Forage trou {i}", now(), "daynriley@gmail.com"
+                f"Forage trou {i}", now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO drilling (id, peg_id, hole_id, depth_m, diameter_mm, rock_type, status, date, operator, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -97,7 +97,7 @@ async def seed_data():
                 (datetime.now() - timedelta(days=i * 4)).strftime("%Y-%m-%d"),
                 "completed" if i < 6 else "planned",
                 "Succès - fragmentation optimale" if i < 6 else None,
-                f"Tir de mine #{i}", now(), "daynriley@gmail.com"
+                f"Tir de mine #{i}", now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO blasting (id, peg_id, blast_id, explosives_kg, holes_count, date, status, result, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -115,7 +115,7 @@ async def seed_data():
                 materials[i % len(materials)],
                 round(800 + i * 45.3, 1), round(2100 + i * 115.7, 1),
                 f"EQ-{(i % 5) + 1:03d}", "day" if i % 2 == 0 else "night",
-                f"Production journée {i}", now(), "daynriley@gmail.com"
+                f"Production journée {i}", now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO production (id, peg_id, date, material_type, volume_m3, tonnage, equipment_id, shift, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -137,7 +137,7 @@ async def seed_data():
         equip_rows = [
             (new_id(), eq[0], eq[1], eq[2], eq[3], eq[4],
              (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-             zones[i % len(zones)], None, now(), "daynriley@gmail.com")
+             zones[i % len(zones)], None, now(), "seed@minetrack.local")
             for i, eq in enumerate(equipment)
         ]
         await db.executemany(
@@ -159,7 +159,7 @@ async def seed_data():
                 "day" if i % 2 == 0 else "night",
                 round(7.5 + (i % 3) * 0.5, 1),
                 datetime.now().strftime("%Y-%m-%d"),
-                f"PEG-{(i % 10) + 1:03d}", origin, contract, None, now(), "daynriley@gmail.com"
+                f"PEG-{(i % 10) + 1:03d}", origin, contract, None, now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO labor (id, employee_id, name, role, team, shift, hours_worked, date, peg_id, origin_status, contract_type, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -181,7 +181,7 @@ async def seed_data():
                 (datetime.now() - timedelta(days=i * 3)).strftime("%Y-%m-%d"),
                 f"Agent {i}", "closed" if i < 7 else "open",
                 "Action corrective appliquée" if i < 7 else None,
-                now(), "daynriley@gmail.com"
+                now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO hse (id, incident_id, type, severity, description, location, date, reported_by, status, corrective_action, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -203,7 +203,7 @@ async def seed_data():
                 round(0.0 + (i % 4) * 0.1, 2) if i % 2 == 0 else None, # Coltan
                 (datetime.now() - timedelta(days=i * 2)).strftime("%Y-%m-%d"),
                 "Dr. Amina Mukendi", f"Échantillon RDC #{i}",
-                now(), "daynriley@gmail.com"
+                now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO geology (id, sample_id, peg_id, depth_from, depth_to, rock_type, grade_au_gt, grade_cu_pct, grade_co_pct, grade_coltan_gt, date, geologist, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -226,7 +226,7 @@ async def seed_data():
                 "resolved" if i < 6 else "open",
                 (datetime.now() - timedelta(days=i * 2)).strftime("%Y-%m-%d"),
                 datetime.now().strftime("%Y-%m-%d") if i < 6 else None,
-                now(), "daynriley@gmail.com"
+                now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO support (id, ticket_id, category, priority, description, requested_by, assigned_to, status, date_created, date_resolved, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -252,7 +252,7 @@ async def seed_data():
                 amount_usd,
                 f"PEG-{(i % 10) + 1:03d}",
                 "Jean-Baptiste Ilunga", f"Enregistrement #{i}",
-                now(), "daynriley@gmail.com"
+                now(), "seed@minetrack.local"
             ))
         await db.executemany(
             "INSERT INTO financial (id, record_id, date, category, currency, description, amount, amount_usd, peg_id, approved_by, notes, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -264,9 +264,9 @@ async def seed_data():
 
         # Incidents
         incidents_data = [
-            (new_id(), "Hémorragie suite à accident LV42", "Opérateur KUBUYA-DAVID blessé par véhicule LV42 au niveau 10L-XC5SS. Transporté à l'hôpital de Kolwezi.", "critical", "10L-XC5SS — MPAMA North", datetime.now().strftime("%Y-%m-%d"), "KUBUYA-DAVID", now(), "daynriley@gmail.com"),
-            (new_id(), "Panne hydraulique haveuse S1D 05", "Défaillance hydraulique majeure sur la foreuse S1D 05. Arrêt machine. Niveau 2 Galerie Principale.", "warning", "Niveau 2, Galerie Principale", (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d"), "Équipe Maintenance Bêta", now(), "daynriley@gmail.com"),
-            (new_id(), "Stock critique — Dynamite seuil atteint", "Seuil minimal de dynamite atteint en entrepôt. Réapprovisionnement requis immédiatement.", "info", "Entrepôt Explosifs — Surface", (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d"), "Gestionnaire Stocks", now(), "daynriley@gmail.com"),
+            (new_id(), "Hémorragie suite à accident LV42", "Opérateur KUBUYA-DAVID blessé par véhicule LV42 au niveau 10L-XC5SS. Transporté à l'hôpital de Kolwezi.", "critical", "10L-XC5SS — MPAMA North", datetime.now().strftime("%Y-%m-%d"), "KUBUYA-DAVID", now(), "seed@minetrack.local"),
+            (new_id(), "Panne hydraulique haveuse S1D 05", "Défaillance hydraulique majeure sur la foreuse S1D 05. Arrêt machine. Niveau 2 Galerie Principale.", "warning", "Niveau 2, Galerie Principale", (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d"), "Équipe Maintenance Bêta", now(), "seed@minetrack.local"),
+            (new_id(), "Stock critique — Dynamite seuil atteint", "Seuil minimal de dynamite atteint en entrepôt. Réapprovisionnement requis immédiatement.", "info", "Entrepôt Explosifs — Surface", (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d"), "Gestionnaire Stocks", now(), "seed@minetrack.local"),
         ]
         await db.executemany(
             "INSERT INTO incidents (id, title, description, severity, location, date, reported_by, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -276,8 +276,8 @@ async def seed_data():
 
         # Equipment Pannes
         pannes_data = [
-            (new_id(), "EQ-003", "hydraulic_failure", "Perte de pression hydraulique complète sur la foreuse Atlas Copco D65", datetime.now().strftime("%Y-%m-%d"), "Kofi Mutombo", "open", now(), "daynriley@gmail.com"),
-            (new_id(), "EQ-006", "breakdown", "Bulldozer CAT D8T en panne moteur totale. Immobilisé sur zone de décapage.", (datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), "Ibrahim Kabila", "open", now(), "daynriley@gmail.com"),
+            (new_id(), "EQ-003", "hydraulic_failure", "Perte de pression hydraulique complète sur la foreuse Atlas Copco D65", datetime.now().strftime("%Y-%m-%d"), "Kofi Mutombo", "open", now(), "seed@minetrack.local"),
+            (new_id(), "EQ-006", "breakdown", "Bulldozer CAT D8T en panne moteur totale. Immobilisé sur zone de décapage.", (datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), "Ibrahim Kabila", "open", now(), "seed@minetrack.local"),
         ]
         await db.executemany(
             "INSERT INTO equipment_pannes (id, equipment_id, issue_type, description, reported_date, reported_by, status, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",

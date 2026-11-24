@@ -102,7 +102,3 @@ export const supervisorAPI = {
   alerts: () => api.get('/supervisor/alerts'),
 };
 
-export const syncAPI = {
-  syncData: (payloads) => api.post('/sync', payloads),
-};
-

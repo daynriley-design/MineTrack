@@ -119,8 +119,8 @@ export default function SupervisorDashboard() {
   const dateLabel = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
 
   const alertItems = [
-    ...alerts.incidents.map((a) => ({ id: `i-${a.id}`, kind: 'incident', title: a.title || a.type || a.description || 'Incident', meta: [a.peg_id, a.severity].filter(Boolean).join(' · '), at: a.created_at })),
-    ...alerts.pannes.map((p) => ({ id: `p-${p.id}`, kind: 'panne', title: p.equipment_name || p.machine || p.equipment_id || 'Panne engin', meta: p.description || p.status, at: p.created_at })),
+    ...alerts.incidents.map((a) => ({ id: `i-${a.id ?? a._id}`, kind: 'incident', title: a.title || a.type || a.description || 'Incident', meta: [a.peg_id, a.severity].filter(Boolean).join(' · '), at: a.created_at })),
+    ...alerts.pannes.map((p) => ({ id: `p-${p.id ?? p._id}`, kind: 'panne', title: p.equipment_name || p.machine || p.equipment_id || 'Panne engin', meta: p.description || p.status, at: p.created_at })),
   ].slice(0, 5);
 
   return (
@@ -295,7 +295,7 @@ export default function SupervisorDashboard() {
           {faceExams.length === 0 ? <p className="mt-empty">Aucune inspection de front enregistrée.</p> : (
             <div className="mt-list">
               {faceExams.map((f) => (
-                <div key={f.id} className="mt-list__item">
+                <div key={f.id ?? f._id} className="mt-list__item">
                   <div className="mt-list__main"><strong>{f.peg_id}</strong><span>{shortDay(f.date)}</span></div>
                   <span className={`mt-pill ${f.ground_condition === 'safe' ? 'mt-pill--soft-green' : 'mt-pill--soft-red'}`}>{f.ground_condition === 'safe' ? 'Sûr' : 'Danger'}</span>
                 </div>
@@ -324,7 +324,7 @@ export default function SupervisorDashboard() {
           {geoReports.length === 0 ? <p className="mt-empty">Aucun rapport reçu pour le moment.</p> : (
             <div className="mt-list">
               {geoReports.map((r) => (
-                <div key={r.id} className="mt-list__item" style={{ alignItems: 'flex-start' }}>
+                <div key={r.id ?? r._id} className="mt-list__item" style={{ alignItems: 'flex-start' }}>
                   <div className="mt-list__main">
                     <strong>PEG {r.peg_id} · Shift {r.shift}</strong>
                     <span>{shortDay(r.date)} — {r.submitted_by || '—'}</span>
