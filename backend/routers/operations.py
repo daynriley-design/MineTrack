@@ -50,6 +50,8 @@ EXTRA_REPORT_TYPES = [
 ]
 
 REPORT_TYPES = COVERAGE_REPORT_TYPES + EXTRA_REPORT_TYPES
+SUPPORT_REPORT_TYPES = {"water_control", "blasting_hours", "machine_index"}
+SHIFT_REPORT_READERS = require_role("admin", "supervisor", "management")
 
 TABLES = {
     "sites": """
@@ -386,7 +388,7 @@ async def create_machine(body: MachineCreate, current_user: dict = Depends(ADMIN
 
 # ───────────────────────────── Agents ──────────────────────────────
 @router.get("/agents")
-async def list_agents(site_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def list_agents(site_id: Optional[str] = None, current_user: dict = Depends(require_role("admin", "supervisor"))):
     sql = "SELECT * FROM agents WHERE active=1"
     args: List = []
     if site_id:
@@ -430,7 +432,7 @@ async def list_stock_entries(
     report_date: Optional[str] = None,
     shift: Optional[str] = Query(None, pattern="^(day|night)$"),
     category: Optional[str] = Query(None, pattern="^(magasinier|explosifs)$"),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin", "supervisor", "logistique")),
 ):
     sql = "SELECT * FROM stock_entries WHERE 1=1"
     args: List = []
@@ -475,7 +477,7 @@ async def list_shift_reports(
     report_date: Optional[str] = None,
     shift: Optional[str] = Query(None, pattern="^(day|night)$"),
     report_type: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(SHIFT_REPORT_READERS),
 ):
     if report_type and report_type not in REPORT_TYPES:
         raise HTTPException(422, "Type de rapport inconnu")
@@ -483,6 +485,9 @@ async def list_shift_reports(
     sql = """SELECT r.*, s.name AS site_name FROM shift_reports r
              LEFT JOIN sites s ON s.id = r.site_id WHERE 1=1"""
     args: List = []
+    if current_user["role"] == "management":
+        sql += " AND r.report_type IN (" + ",".join("?" for _ in COVERAGE_REPORT_TYPES) + ")"
+        args.extend(COVERAGE_REPORT_TYPES)
     for col, val in (("r.site_id", site_id), ("r.report_date", report_date),
                      ("r.shift", shift), ("r.report_type", report_type)):
         if val:
@@ -502,6 +507,8 @@ async def create_shift_report(
 ):
     if body.report_type not in REPORT_TYPES:
         raise HTTPException(422, "Type de rapport inconnu")
+    if current_user["role"] == "support" and body.report_type not in SUPPORT_REPORT_TYPES:
+        raise HTTPException(403, "Type de rapport réservé à la supervision")
     if body.shift not in ("day", "night"):
         raise HTTPException(422, "Shift invalide")
 
@@ -521,7 +528,7 @@ async def create_shift_report(
 @router.get("/shift-reports/coverage")
 async def shift_reports_coverage(
     report_date: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(SHIFT_REPORT_READERS),
 ):
     """Couverture des 9 rapports par site et par shift — vue 'Tous les rapports'."""
     day = report_date or date.today().isoformat()

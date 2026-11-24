@@ -1,6 +1,4 @@
 import os
-import sqlite3
-
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
@@ -9,24 +7,15 @@ from fastapi import HTTPException, Request, Depends
 JWT_ALGORITHM = "HS256"
 
 
-def _account_still_valid(claims: dict) -> bool:
-    """Le compte du jeton existe-t-il encore avec ce role ?
-
-    Un compte supprime (ou dont le role a change) perd sa session tout de
-    suite, au lieu de rester valide jusqu'a l'expiration du jeton (24 h).
-    On compare email + role (et non l'id) : sur Vercel chaque instance a sa
-    propre base /tmp ou les comptes de demo ont des id differents.
-    """
+async def _account_still_valid(claims: dict) -> bool:
+    """Vérifie que le compte lié au jeton est toujours actif."""
     import database  # import local : evite un cycle au chargement
-    try:
-        row = database.sync_fetchone(
-            "SELECT 1 FROM users WHERE email=? AND role=? AND COALESCE(status, 'active')='active' LIMIT 1",
-            (claims.get("email"), claims.get("role")),
-        )
-        return row is not None
-    except sqlite3.OperationalError:
-        # SQLite : table pas encore creee (ensure_db s'en charge) -> on ne bloque pas.
-        return True
+    async with database.connect() as db:
+        async with db.execute(
+            "SELECT 1 FROM users WHERE id=? AND email=? AND role=? AND COALESCE(status, 'active')='active'",
+            (claims.get("sub"), claims.get("email"), claims.get("role")),
+        ) as cur:
+            return await cur.fetchone() is not None
 
 
 def get_jwt_secret() -> str:
@@ -75,8 +64,11 @@ async def get_current_user(request: Request):
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     claims = decode_token(token)
-    if not _account_still_valid(claims):
+    if not await _account_still_valid(claims):
         raise HTTPException(status_code=401, detail="Compte supprimé ou modifié")
+    queued_account = request.headers.get("x-minetrack-account")
+    if queued_account is not None and queued_account != claims.get("sub"):
+        raise HTTPException(status_code=409, detail="La saisie appartient à un autre compte")
     return claims
 
 

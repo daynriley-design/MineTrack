@@ -5,6 +5,15 @@
 const DB_NAME = 'minetrack_offline';
 const DB_VERSION = 1;
 const STORE_NAME = 'pending_requests';
+let activeAccount = null;
+
+export function setOfflineAccount(account) {
+  activeAccount = account || null;
+}
+
+export function getOfflineAccount() {
+  return activeAccount;
+}
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -20,25 +29,26 @@ function openDB() {
   });
 }
 
-export async function enqueueRequest({ method, url, data }) {
+export async function enqueueRequest({ account, method, url, data }) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    const entry = { method, url, data, created_at: new Date().toISOString() };
+    const entry = { account, method, url, data, created_at: new Date().toISOString() };
     const req = store.add(entry);
     req.onsuccess = () => resolve({ ...entry, id: req.result });
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function getQueue() {
+export async function getQueue(account) {
+  if (!account) return [];
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const req = store.getAll();
-    req.onsuccess = () => resolve(req.result || []);
+    req.onsuccess = () => resolve((req.result || []).filter((entry) => entry.account === account));
     req.onerror = () => reject(req.error);
   });
 }
@@ -55,6 +65,6 @@ export async function removeFromQueue(id) {
 }
 
 export async function getQueueCount() {
-  const items = await getQueue();
+  const items = await getQueue(getOfflineAccount());
   return items.length;
 }

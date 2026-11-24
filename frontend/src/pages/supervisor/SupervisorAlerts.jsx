@@ -34,7 +34,7 @@ function loadAcked() {
   try { return JSON.parse(localStorage.getItem(ACK_KEY) || '{}'); } catch { return {}; }
 }
 function saveAcked(obj) {
-  localStorage.setItem(ACK_KEY, JSON.stringify(obj));
+  try { localStorage.setItem(ACK_KEY, JSON.stringify(obj)); } catch { /* navigation privee : non memorise */ }
 }
 
 // Convert backend incident/panne to display alert

@@ -71,8 +71,9 @@ Créés par `backend/create_accounts.py` (idempotent, relançable sans risque). 
 ### Configuration du déploiement
 
 - `DATABASE_URL` sélectionne PostgreSQL, y compris une base Supabase. Sur Vercel, SQLite utilise `/tmp/minetrack.db`, un stockage éphémère. Le démarrage initialise le schéma de la base sélectionnée. Le transfert de données existantes depuis SQLite est une opération séparée.
+- La connexion PostgreSQL vérifie le certificat du serveur (`sslmode=verify-full` par défaut). Supabase signe ses certificats avec sa propre autorité : télécharger son certificat (*Database Settings → SSL Configuration → Download certificate*), le placer dans le dépôt (ex. `backend/certs/supabase-ca.crt`, fichier public) et définir `MINETRACK_DB_CA_FILE` vers ce fichier ; sinon la connexion à Supabase échoue.
 - `JWT_SECRET` est requis par le backend pour signer les sessions.
-- `MINETRACK_DEMO_ACCOUNTS=0` désactive la création automatique des comptes de démo sur un déploiement Vercel.
+- Les comptes de démo sont créés uniquement avec `MINETRACK_DEMO_ACCOUNTS=1`. Sur Vercel ou PostgreSQL, définir aussi un mot de passe de démo privé de 12 à 72 octets (`MINETRACK_DEMO_PASSWORD`). Exception : sur Vercel sans base PostgreSQL, `api/index.py` les active d'office, sinon la base `/tmp` vide ne permettrait aucune connexion ; ils ne sont jamais créés automatiquement dans PostgreSQL.
 - `VITE_GA_MEASUREMENT_ID` active Google Analytics lors du build frontend. Les changements de route sont suivis via la mesure améliorée du flux Web GA4, avec le suivi des événements d'historique activé.
 
 ### Données de démonstration (optionnel)

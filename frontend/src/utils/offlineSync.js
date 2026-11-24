@@ -1,18 +1,26 @@
 import api from '../api';
-import { getQueue, removeFromQueue } from './offlineQueue';
+import { getOfflineAccount, getQueue, removeFromQueue } from './offlineQueue';
 
 let syncing = false;
 
 export async function syncOfflineQueue() {
-  if (syncing || !navigator.onLine) return { synced: 0, failed: 0 };
+  const account = getOfflineAccount();
+  if (!account || syncing || !navigator.onLine) return { synced: 0, failed: 0 };
   syncing = true;
   let synced = 0;
   let failed = 0;
   try {
-    const queue = await getQueue();
+    const queue = await getQueue(account);
     for (const item of queue) {
+      if (getOfflineAccount() !== account) break;
       try {
-        await api.request({ method: item.method, url: item.url, data: item.data });
+        await api.request({
+          method: item.method,
+          url: item.url,
+          data: item.data,
+          headers: { 'X-MineTrack-Account': account },
+          offlineReplay: true,
+        });
         await removeFromQueue(item.id);
         synced++;
       } catch {
@@ -21,6 +29,8 @@ export async function syncOfflineQueue() {
         failed++;
       }
     }
+  } catch {
+    failed++;
   } finally {
     syncing = false;
   }

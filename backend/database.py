@@ -33,6 +33,8 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
 IS_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+if DATABASE_URL and not IS_POSTGRES:
+    raise RuntimeError("DATABASE_URL doit être une URI PostgreSQL")
 DB_PATH = Path(os.environ.get("MINETRACK_DB_PATH") or ROOT_DIR / "minetrack.db")
 
 
@@ -53,14 +55,11 @@ def _pg_connect():
 
     u = urlparse(DATABASE_URL)
     query = parse_qs(u.query)
-    sslmode = (query.get("sslmode") or ["require"])[0]
-    ssl_ctx = None
-    if sslmode != "disable":
-        ssl_ctx = ssl.create_default_context()
-        if sslmode in ("require", "prefer", "allow"):
-            # « require » = chiffre sans verification du certificat (comme libpq).
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
+    sslmode = (query.get("sslmode") or ["verify-full"])[0]
+    if sslmode == "disable" and not os.environ.get("VERCEL") and os.environ.get("MINETRACK_ENV") != "production":
+        ssl_ctx = False
+    else:
+        ssl_ctx = ssl.create_default_context(cafile=os.environ.get("MINETRACK_DB_CA_FILE"))
     return pg8000.dbapi.connect(
         user=unquote(u.username or "postgres"),
         password=unquote(u.password or ""),

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { enqueueRequest } from './utils/offlineQueue';
+import { enqueueRequest, getOfflineAccount } from './utils/offlineQueue';
 
 const api = axios.create({
   baseURL: '/api',
@@ -9,6 +9,11 @@ const api = axios.create({
 
 const MUTATING_METHODS = ['post', 'put', 'patch', 'delete'];
 
+api.interceptors.request.use((config) => {
+  config.offlineAccount ??= getOfflineAccount();
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -17,12 +22,14 @@ api.interceptors.response.use(
     // Pas de réponse du tout = vraie coupure réseau (pas une erreur 4xx/5xx du serveur).
     const isNetworkFailure = !error.response;
 
-    const isAuthEndpoint = (config.url || '').includes('/auth/');
+    const url = config.url || '';
+    const isAccountEndpoint = /^\/(?:auth(?:\/|$)|supervisor\/users(?:\/|\?|$))/.test(url);
 
-    if (isNetworkFailure && MUTATING_METHODS.includes(method) && !isAuthEndpoint) {
+    if (isNetworkFailure && MUTATING_METHODS.includes(method) && config.offlineAccount
+        && !config.offlineReplay && !isAccountEndpoint) {
       try {
         const data = config.data ? JSON.parse(config.data) : {};
-        await enqueueRequest({ method, url: config.url, data });
+        await enqueueRequest({ account: config.offlineAccount, method, url, data });
         window.dispatchEvent(new CustomEvent('minetrack:offline-queued'));
         // On résout comme si la requête avait réussi : l'écran ne bloque pas le mineur/géologue
         // sur le terrain. La synchronisation réelle se fait dès que la connexion revient.

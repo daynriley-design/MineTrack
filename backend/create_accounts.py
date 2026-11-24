@@ -35,6 +35,11 @@ def ensure_accounts(db_path=DB, verbose=True):
     doivent jamais protéger un site accessible sur internet.
     """
     override = os.environ.get("MINETRACK_DEMO_PASSWORD")
+    if not override and (database.IS_POSTGRES or os.environ.get("VERCEL")
+                         or os.environ.get("MINETRACK_ENV") == "production"):
+        raise RuntimeError("MINETRACK_DEMO_PASSWORD est requis pour les comptes de démo hors développement local")
+    if override and (override in {account[1] for account in ACCOUNTS} or not 12 <= len(override.encode()) <= 72):
+        raise RuntimeError("MINETRACK_DEMO_PASSWORD doit être unique et contenir entre 12 et 72 octets")
 
     # Postgres (Supabase, DATABASE_URL) ou SQLite (fichier db_path).
     if database.IS_POSTGRES:
@@ -52,9 +57,12 @@ def ensure_accounts(db_path=DB, verbose=True):
             if exists(email, role):
                 continue
             pwd = override or default_pwd
+            uid = uuid.uuid4()
+            if not database.IS_POSTGRES and os.environ.get("VERCEL"):
+                uid = uuid.uuid5(uuid.NAMESPACE_URL, f"https://minetrack.app/demo/{email}/{role}")
             inserts.append((
-                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?,?,?,?,?,?)",
-                (str(uuid.uuid4()), email, bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(),
+                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+                (str(uid), email, bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(),
                  name, role, datetime.now(timezone.utc).isoformat()),
             ))
             if verbose:

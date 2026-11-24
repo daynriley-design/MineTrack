@@ -3,6 +3,7 @@ Minetrack - Backend API Server (SQLite version)
 FastAPI + aiosqlite (no MongoDB required)
 """
 import json
+import logging
 import os
 import uuid
 import aiosqlite
@@ -13,8 +14,9 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from models import (
     UserCreate, UserLogin,
@@ -35,6 +37,7 @@ from auth_utils import (
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+logger = logging.getLogger(__name__)
 
 # Chemin de la base : backend/minetrack.db en local ; sur un hebergeur sans
 # disque inscriptible (Vercel), MINETRACK_DB_PATH=/tmp/minetrack.db.
@@ -42,6 +45,13 @@ DB_PATH = database.DB_PATH  # utilise seulement en mode SQLite
 
 # ─── Tables DDL ──────────────────────────────────────────────────────────────
 TABLES = {
+    "auth_throttle": """
+        CREATE TABLE IF NOT EXISTS auth_throttle (
+            bucket TEXT PRIMARY KEY,
+            expires_at BIGINT NOT NULL,
+            attempts INTEGER NOT NULL
+        )
+    """,
     "users": """
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -399,6 +409,7 @@ def rows_to_list(rows, cursor):
 
 # ─── Initialisation de la base ────────────────────────────────────────────────
 _db_ready = False
+_unique_user_emails = False
 
 
 async def _add_columns(columns):
@@ -422,7 +433,7 @@ async def ensure_db():
     n'est pas garanti et /tmp repart vide a chaque nouvelle instance.
     Avec MINETRACK_DEMO_ACCOUNTS=1, les comptes de demo sont aussi crees.
     """
-    global _db_ready
+    global _db_ready, _unique_user_emails
     if _db_ready:
         return
     if not database.IS_POSTGRES:
@@ -445,8 +456,15 @@ async def ensure_db():
         ("hse_checklists", "reviewed_by", "TEXT"),
         ("hse_checklists", "reviewed_at", "TEXT"),
     ])
+    async with database.connect() as db:
+        try:
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email_normalized ON users (LOWER(TRIM(email)))")
+            await db.commit()
+            _unique_user_emails = True
+        except database.INTEGRITY_ERRORS:
+            logger.error("Existing duplicate account emails prevent account creation until reconciled")
     await operations.init_operations_tables()
-    if os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
+    if _unique_user_emails and os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
         from create_accounts import ensure_accounts
         ensure_accounts(DB_PATH, verbose=False)
     _db_ready = True
@@ -470,17 +488,45 @@ app = FastAPI(
 
 MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 Mo (photos en base64 comprises)
 
+class BodyLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] not in {"POST", "PUT", "PATCH", "DELETE"}:
+            await self.app(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > MAX_BODY_BYTES:
+                response = JSONResponse({"detail": "Requête trop volumineuse (10 Mo maximum)"}, status_code=413)
+                await response(scope, receive, send)
+                return
+            body.extend(chunk)
+            if not message.get("more_body"):
+                break
+
+        async def read_body():
+            nonlocal body
+            if body is None:
+                return await receive()
+            data, body = bytes(body), None
+            return {"type": "http.request", "body": data, "more_body": False}
+
+        await self.app(scope, read_body, send)
+
 
 @app.middleware("http")
 async def _init_db_middleware(request: Request, call_next):
-    # Refuse les corps de requete demesures avant de les lire.
-    length = request.headers.get("content-length")
-    if length and length.isdigit() and int(length) > MAX_BODY_BYTES:
-        from fastapi.responses import JSONResponse
-        return JSONResponse({"detail": "Requête trop volumineuse (10 Mo maximum)"}, status_code=413)
     await ensure_db()
     return await call_next(request)
 
+app.add_middleware(BodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -503,22 +549,25 @@ app.include_router(operations.router)
 # pas etre demande. (Avant l'audit : inscription « supervisor » immediate.)
 SELF_REGISTER_ROLES = {"operator", "geologist", "logistique", "support", "supervisor", "management"}
 REGISTER_MAX_PER_HOUR = 5
-_register_attempts: dict = {}
-
-# Limite anti force brute sur /login : N echecs par (IP, email) sur la fenetre.
 LOGIN_MAX_FAILURES = 10
 LOGIN_WINDOW_SECONDS = 15 * 60
-_login_failures: dict = {}
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?")
+    if os.environ.get("VERCEL"):
+        forwarded = request.headers.get("x-vercel-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+# Hash factice : /login fait toujours un calcul bcrypt, que l'email existe ou non
+# (sinon le temps de reponse revele quels emails ont un compte).
+_DUMMY_HASH = hash_password("minetrack-timing-equalizer")
 
 
 def _is_https(request: Request) -> bool:
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    return proto.split(",")[0].strip() == "https"
+    return _IS_PROD or request.url.scheme == "https"
 
 
 def _set_session_cookie(response: Response, request: Request, token: str):
@@ -527,54 +576,46 @@ def _set_session_cookie(response: Response, request: Request, token: str):
                         secure=_is_https(request), max_age=86400)
 
 
-def _recent_failures(key) -> list:
-    cutoff = datetime.now(timezone.utc).timestamp() - LOGIN_WINDOW_SECONDS
-    # Menage periodique : les compteurs ne grossissent pas sans fin en memoire.
-    if len(_login_failures) > 5000:
-        for k in [k for k, v in _login_failures.items() if not v or v[-1] < cutoff]:
-            _login_failures.pop(k, None)
-    if len(_register_attempts) > 5000:
-        hour_ago = datetime.now(timezone.utc).timestamp() - 3600
-        for k in [k for k, v in _register_attempts.items() if not v or v[-1] < hour_ago]:
-            _register_attempts.pop(k, None)
-    attempts = [t for t in _login_failures.get(key, []) if t > cutoff]
-    if attempts:
-        _login_failures[key] = attempts
-    else:
-        _login_failures.pop(key, None)
-    return attempts
+async def _consume_auth_quota(bucket: str, limit: int, window: int) -> bool:
+    now = int(datetime.now(timezone.utc).timestamp())
+    async with database.connect() as db:
+        async with db.execute(
+            """INSERT INTO auth_throttle (bucket, expires_at, attempts) VALUES (?, ?, 1)
+               ON CONFLICT (bucket) DO UPDATE SET
+                   attempts=CASE WHEN auth_throttle.expires_at <= ? THEN 1 ELSE auth_throttle.attempts + 1 END,
+                   expires_at=CASE WHEN auth_throttle.expires_at <= ? THEN excluded.expires_at ELSE auth_throttle.expires_at END
+               WHERE auth_throttle.expires_at <= ? OR auth_throttle.attempts < ?
+               RETURNING attempts""",
+            (bucket, now + window, now, now, now, limit),
+        ) as cur:
+            admitted = await cur.fetchone() is not None
+        if now % 60 == 0:
+            await db.execute("DELETE FROM auth_throttle WHERE expires_at <= ?", (now,))
+        await db.commit()
+    return admitted
 
 
 @app.post("/api/auth/register")
 async def register(user_input: UserCreate, request: Request):
     """Demande de compte : creee en attente, sans session, a valider par l'equipe."""
     ip = _client_ip(request)
-    now_ts = datetime.now(timezone.utc).timestamp()
-    recent = [t for t in _register_attempts.get(ip, []) if t > now_ts - 3600]
-    if len(recent) >= REGISTER_MAX_PER_HOUR:
+    if not await _consume_auth_quota(f"register:{ip}", REGISTER_MAX_PER_HOUR, 3600):
         raise HTTPException(status_code=429, detail="Trop de demandes : réessayez dans une heure")
-    _register_attempts[ip] = recent + [now_ts]
 
     email = (user_input.email or "").lower().strip()
     name = (user_input.name or "").strip()
-    if "@" not in email or "." not in email.split("@")[-1]:
+    if len(email) > 254 or "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(status_code=422, detail="Email invalide")
     if not name:
         raise HTTPException(status_code=422, detail="Nom requis")
     if len(user_input.password or "") < 8:
         raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
+    if len(user_input.password.encode()) > 72:
+        raise HTTPException(status_code=422, detail="Mot de passe : 72 octets maximum")
     if user_input.role not in SELF_REGISTER_ROLES:
         raise HTTPException(status_code=422, detail="Rôle non disponible à l'inscription")
-    async with database.connect() as db:
-        async with db.execute("SELECT 1 FROM users WHERE email=?", (email,)) as cur:
-            if await cur.fetchone():
-                raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
-        await db.execute(
-            "INSERT INTO users (id, email, password, name, role, created_at, status) VALUES (?,?,?,?,?,?,?)",
-            (str(uuid.uuid4()), email, hash_password(user_input.password), name,
-             user_input.role, datetime.now(timezone.utc).isoformat(), "pending"),
-        )
-        await db.commit()
+    await _insert_user(str(uuid.uuid4()), email, user_input.password, name, user_input.role,
+                       datetime.now(timezone.utc).isoformat(), "pending")
     return {"message": "Demande envoyée : un administrateur ou un superviseur doit valider votre compte.",
             "status": "pending"}
 
@@ -582,8 +623,13 @@ async def register(user_input: UserCreate, request: Request):
 @app.post("/api/auth/login")
 async def login(user_input: UserLogin, request: Request, response: Response):
     email = user_input.email.lower().strip()
-    key = (_client_ip(request), email)
-    if len(_recent_failures(key)) >= LOGIN_MAX_FAILURES:
+    if len(email) > 254:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    ip_bucket = f"login-ip:{_client_ip(request)}"
+    account_bucket = f"login-account:{email}"
+    if not await _consume_auth_quota(ip_bucket, 60, LOGIN_WINDOW_SECONDS) or not await _consume_auth_quota(
+        account_bucket, LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS
+    ):
         raise HTTPException(status_code=429, detail="Trop de tentatives : réessayez dans 15 minutes")
     async with database.connect() as db:
         db.row_factory = aiosqlite.Row
@@ -595,17 +641,21 @@ async def login(user_input: UserLogin, request: Request, response: Response):
         if verify_password(user_input.password, u["password"]):
             valid_user = u
             break
+    if not users:
+        verify_password(user_input.password, _DUMMY_HASH)
 
     if not valid_user:
-        _login_failures.setdefault(key, []).append(datetime.now(timezone.utc).timestamp())
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    _login_failures.pop(key, None)
+    async with database.connect() as db:
+        await db.execute("DELETE FROM auth_throttle WHERE bucket=?", (account_bucket,))
+        await db.commit()
     if (valid_user["status"] or "active") != "active":
         raise HTTPException(status_code=403, detail="Compte en attente de validation par un administrateur ou un superviseur")
 
     token = create_access_token({"sub": valid_user["id"], "email": email, "role": valid_user["role"], "name": valid_user["name"]})
     _set_session_cookie(response, request, token)
-    return {"message": "Login successful", "email": email, "role": valid_user["role"], "name": valid_user["name"]}
+    return {"message": "Login successful", "sub": valid_user["id"], "email": email,
+            "role": valid_user["role"], "name": valid_user["name"]}
 
 
 @app.post("/api/auth/logout")
@@ -641,30 +691,38 @@ class StaffCreate(BaseModel):
     password: str
 
 
+async def _insert_user(uid, email, password, name, role, created, status):
+    if not _unique_user_emails:
+        raise HTTPException(status_code=503, detail="La création de comptes est temporairement indisponible")
+    try:
+        async with database.connect() as db:
+            await db.execute(
+                "INSERT INTO users (id, email, password, name, role, created_at, status) VALUES (?,?,?,?,?,?,?)",
+                (uid, email, hash_password(password), name, role, created, status),
+            )
+            await db.commit()
+    except database.INTEGRITY_ERRORS as error:
+        raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email") from error
+
+
 @app.post("/api/supervisor/users")
 async def create_user(body: StaffCreate, current_user: dict = Depends(require_role("supervisor", "admin"))):
     email = body.email.lower().strip()
-    if "@" not in email or "." not in email.split("@")[-1]:
+    if len(email) > 254 or "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(status_code=422, detail="Email invalide")
     if not body.name.strip():
         raise HTTPException(status_code=422, detail="Nom requis")
     if len(body.password) < 8:
         raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
+    if len(body.password.encode()) > 72:
+        raise HTTPException(status_code=422, detail="Mot de passe : 72 octets maximum")
     if body.role not in ALL_ROLES:
         raise HTTPException(status_code=422, detail="Rôle inconnu")
     if current_user.get("role") != "admin" and body.role not in SUPERVISOR_CREATABLE:
         raise HTTPException(status_code=403, detail="Un superviseur ne peut pas créer ce rôle")
     uid = str(uuid.uuid4())
     created = datetime.now(timezone.utc).isoformat()
-    async with database.connect() as db:
-        async with db.execute("SELECT 1 FROM users WHERE email=?", (email,)) as cur:
-            if await cur.fetchone():
-                raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
-        await db.execute(
-            "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?,?,?,?,?,?)",
-            (uid, email, hash_password(body.password), body.name.strip(), body.role, created),
-        )
-        await db.commit()
+    await _insert_user(uid, email, body.password, body.name.strip(), body.role, created, "active")
     return {"id": uid, "email": email, "name": body.name.strip(), "role": body.role, "created_at": created}
 
 
@@ -692,17 +750,27 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_role("s
             target = await cur.fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-        # Un superviseur ne peut pas supprimer un administrateur.
-        if target[0] == "admin" and current_user.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Seul un administrateur peut supprimer un administrateur")
+        if current_user.get("role") != "admin" and target[0] not in SUPERVISOR_CREATABLE:
+            raise HTTPException(status_code=403, detail="Seul un administrateur peut supprimer ce rôle")
         await db.execute("DELETE FROM users WHERE id=?", (user_id,))
         await db.commit()
     return {"message": "User deleted"}
 
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────
+# Les indicateurs globaux (dont le total des depenses) sont reserves a l'encadrement :
+# avant, tout compte connecte (operateur, logistique...) pouvait lire les finances ici.
+DASHBOARD_READERS = require_role("admin", "supervisor", "management")
+
+
+@app.get("/api/health")
+async def health():
+    """Etat du service, sans donnee sensible : indique le type de base utilise."""
+    return {"status": "ok", "database": "postgres" if database.IS_POSTGRES else "sqlite"}
+
+
 @app.get("/api/dashboard/stats")
-async def dashboard_stats(current_user: dict = Depends(get_current_user)):
+async def dashboard_stats(current_user: dict = Depends(DASHBOARD_READERS)):
     async with database.connect() as db:
         async def count(table, where="1=1"):
             async with db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}") as c:
@@ -752,7 +820,7 @@ async def dashboard_stats(current_user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/dashboard/charts")
-async def dashboard_charts(current_user: dict = Depends(get_current_user)):
+async def dashboard_charts(current_user: dict = Depends(DASHBOARD_READERS)):
     async with database.connect() as db:
         async with db.execute("SELECT date, SUM(tonnage) as tonnage FROM production GROUP BY date ORDER BY date DESC LIMIT 14") as c:
             prod = [{"date": r[0], "tonnage": r[1]} for r in await c.fetchall()]
@@ -791,7 +859,6 @@ async def dashboard_charts(current_user: dict = Depends(get_current_user)):
     }
 
 
-# Modifier / supprimer des donnees metier : admin et superviseur uniquement.────────────────────────────────────────────────────────────────
 # Modifier / supprimer des donnees metier : admin et superviseur uniquement.
 # (Avant : tout compte connecte, ex. un operateur pouvait effacer les finances.)
 MANAGERS = require_role("admin", "supervisor")
@@ -853,16 +920,27 @@ async def delete_peg(item_id: str, current_user: dict = Depends(MANAGERS)):
 # ─── Generic CRUD factory ─────────────────────────────────────────────────────
 def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
     """Adds GET list, POST create, GET one, DELETE one for a table."""
+    read_access = {
+        "financial": DASHBOARD_READERS,
+        "labor": MANAGERS,
+        "pto": MANAGERS,
+    }.get(route_name, get_current_user)
+    write_access = {
+        "financial": require_role("admin"),
+        "labor": MANAGERS,
+        "pto": MANAGERS,
+    }.get(route_name, get_current_user)
+    manage_access = write_access if route_name == "financial" else MANAGERS
 
     @app.get(f"/api/{route_name}")
-    async def list_items(current_user: dict = Depends(get_current_user)):
+    async def list_items(current_user: dict = Depends(read_access)):
         async with database.connect() as db:
             async with db.execute(f"SELECT * FROM {table} ORDER BY created_at DESC LIMIT 200") as cur:
                 rows = await cur.fetchall()
                 return rows_to_list(rows, cur)
 
     @app.post(f"/api/{route_name}")
-    async def create_item(body: ModelClass, current_user: dict = Depends(get_current_user)):
+    async def create_item(body: ModelClass, current_user: dict = Depends(write_access)):
         uid = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         data = body.model_dump()
@@ -875,7 +953,7 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
         return {"id": uid, **data, "created_at": now}
 
     @app.get(f"/api/{route_name}/{{item_id}}")
-    async def get_item(item_id: str, current_user: dict = Depends(get_current_user)):
+    async def get_item(item_id: str, current_user: dict = Depends(read_access)):
         async with database.connect() as db:
             async with db.execute(f"SELECT * FROM {table} WHERE id=?", (item_id,)) as cur:
                 row = await cur.fetchone()
@@ -884,19 +962,31 @@ def make_generic_routes(route_name: str, table: str, ModelClass, fields: list):
                 return row_to_dict(row, cur)
 
     @app.delete(f"/api/{route_name}/{{item_id}}")
-    async def delete_item(item_id: str, current_user: dict = Depends(MANAGERS)):
+    async def delete_item(item_id: str, current_user: dict = Depends(manage_access)):
         async with database.connect() as db:
             await db.execute(f"DELETE FROM {table} WHERE id=?", (item_id,))
             await db.commit()
         return {"message": "Deleted"}
 
     @app.put(f"/api/{route_name}/{{item_id}}")
-    async def update_item(item_id: str, body: dict, current_user: dict = Depends(MANAGERS)):
+    async def update_item(item_id: str, body: dict, current_user: dict = Depends(manage_access)):
         updates = {k: v for k, v in body.items() if k in fields}
         if not updates:
             return {"message": "Nothing to update"}
-        set_clause = ", ".join(f"{k}=?" for k in updates)
         async with database.connect() as db:
+            async with db.execute(f"SELECT {','.join(fields)} FROM {table} WHERE id=?", (item_id,)) as cur:
+                row = await cur.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=404, detail="Enregistrement introuvable")
+                record = row_to_dict(row, cur)
+            try:
+                validated = ModelClass.model_validate({**record, **updates}).model_dump()
+            except ValidationError as error:
+                raise HTTPException(status_code=422, detail="Valeurs de mise à jour invalides") from error
+            updates = {field: validated[field] for field in updates}
+            if table == "hse_checklists":
+                updates.update(status="pending", reviewed_by=None, reviewed_at=None)
+            set_clause = ", ".join(f"{key}=?" for key in updates)
             await db.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", (*updates.values(), item_id))
             await db.commit()
         return {"message": "Updated"}
@@ -948,7 +1038,7 @@ for route_name, table, ModelClass, fields in MODULES_CONFIG:
 
 # ─── Reports ──────────────────────────────────────────────────────────────────
 @app.get("/api/reports/summary")
-async def reports_summary(current_user: dict = Depends(get_current_user)):
+async def reports_summary(current_user: dict = Depends(DASHBOARD_READERS)):
     async with database.connect() as db:
         async def count(table, where="1=1"):
             async with db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}") as c:
@@ -990,7 +1080,7 @@ async def reports_summary(current_user: dict = Depends(get_current_user)):
         }
 
 @app.get("/api/supervisor/alerts")
-async def supervisor_alerts(current_user: dict = Depends(get_current_user)):
+async def supervisor_alerts(current_user: dict = Depends(MANAGERS)):
     async with database.connect() as db:
         async with db.execute("SELECT * FROM incidents WHERE severity='high' OR severity='critical' ORDER BY created_at DESC LIMIT 20") as cur:
             incidents = rows_to_list(await cur.fetchall(), cur)

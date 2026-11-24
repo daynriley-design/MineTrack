@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../api';
+import { setOfflineAccount } from '../utils/offlineQueue';
 
 const AuthContext = createContext(null);
 
@@ -10,13 +11,17 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     authAPI.me()
-      .then((res) => setUser(res.data))
+      .then((res) => {
+        setOfflineAccount(res.data.sub);
+        setUser(res.data);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (credentials) => {
     const res = await authAPI.login(credentials);
+    setOfflineAccount(res.data.sub);
     setUser(res.data);
     return res.data;
   };
@@ -29,6 +34,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await authAPI.logout();
+    setOfflineAccount(null);
     setUser(null);
   };
 
