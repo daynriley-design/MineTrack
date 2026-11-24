@@ -1,0 +1,37 @@
+name: MineTrack iOS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+          xcodegen generate
+      - name: Build simulator app
+        run: |
+          xcodebuild -project MineTrack.xcodeproj -scheme MineTrack \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          ditto -c -k --keepParent build/Build/Products/Debug-iphonesimulator/MineTrack.app MineTrack-iOS-Simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MineTrack-iOS-Simulator
+          path: ios/MineTrack-iOS-Simulator.zip
+          if-no-files-found: error
