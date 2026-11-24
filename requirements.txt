@@ -1,2 +1,11 @@
-# Dépendances de la fonction Python Vercel (api/index.py) = celles du backend.
--r backend/requirements.txt
+# Dépendances de la fonction Python Vercel (api/index.py).
+# Copie de backend/requirements.txt : Vercel ne lit pas « -r », garder les deux identiques.
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+aiosqlite==0.22.1
+pydantic==2.14.4
+python-dotenv==1.2.4
+bcrypt==5.0.0
+PyJWT==2.15.1
+python-jose[cryptography]==3.5.0
+python-multipart==0.0.34

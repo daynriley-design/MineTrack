@@ -1,0 +1,16 @@
+# Jamais envoyé à Vercel : secrets, base locale, dépendances et fichiers de travail
+.env
+backend/.env
+backend/minetrack.db
+backend/minetrack.db-*
+backend/.deps_installed
+**/__pycache__
+**/*.pyc
+node_modules
+frontend/node_modules
+frontend/dist
+_sauvegarde_theme_sombre_src
+.claude
+.git
+frontend.zip
+START_MINETRACK.bat
