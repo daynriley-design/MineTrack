@@ -34,6 +34,8 @@ export async function ensureLocaleLoaded(lng) {
 // démarrage que pour un changement manuel, donc un seul mécanisme couvre les deux.
 i18n.on('languageChanged', (lng) => {
   const code = (lng || '').slice(0, 2);
+  // <html lang> suit la langue choisie (lecteurs d'ecran, traduction du navigateur).
+  if (code && typeof document !== 'undefined') document.documentElement.lang = code;
   if (!code || code === 'fr' || loadedLocales.has(code) || !LOCALE_LOADERS[code]) return;
   ensureLocaleLoaded(code).then(() => {
     // addResourceBundle seul ne re-render pas les composants déjà montés ;

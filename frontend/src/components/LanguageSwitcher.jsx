@@ -23,7 +23,7 @@ export default function LanguageSwitcher({ style }) {
   return (
     <select
       aria-label="Choisir la langue / Choose language"
-      value={(i18n.resolvedLanguage || i18n.language || 'fr').slice(0, 2)}
+      value={(i18n.language || i18n.resolvedLanguage || 'fr').slice(0, 2)}
       onChange={(e) => changeLanguage(e.target.value)}
       style={{
         background: 'var(--color-rock-2, #F7F8FA)',

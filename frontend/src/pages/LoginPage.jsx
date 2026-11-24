@@ -18,12 +18,12 @@ const ROLE_EMAILS = {
 
 // Fonctions proposees a l'inscription (le serveur refuse « admin »).
 const SIGNUP_ROLES = [
-  { key: 'operator', label: 'Opérateur / mineur' },
-  { key: 'geologist', label: 'Géologue' },
-  { key: 'logistique', label: 'Logistique' },
-  { key: 'support', label: 'Support technique' },
-  { key: 'supervisor', label: 'Superviseur' },
-  { key: 'management', label: 'Management' },
+  { key: 'operator', labelKey: 'app.role_operator_signup' },
+  { key: 'geologist', labelKey: 'user.role_geologist' },
+  { key: 'logistique', labelKey: 'user.role_logistique' },
+  { key: 'support', labelKey: 'user.role_support' },
+  { key: 'supervisor', labelKey: 'user.role_supervisor' },
+  { key: 'management', labelKey: 'user.role_management' },
 ];
 
 const LANGUAGES = [
@@ -160,8 +160,8 @@ export default function LoginPage() {
       const status = err?.response?.status;
       setError(
         status === 401 ? t('login.error_invalid')
-          : status === 403 ? 'Votre compte est en attente de validation par un administrateur ou un superviseur.'
-            : status === 429 ? 'Trop de tentatives : réessayez dans 15 minutes.'
+          : status === 403 ? t('app.err_pending')
+            : status === 429 ? t('app.err_too_many')
               : t('login.error_server')
       );
       setPassword('');
@@ -180,8 +180,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setNotice('');
-    if (signup.password.length < 8) { setError('Mot de passe : 8 caractères minimum.'); return; }
-    if (signup.password !== signup.confirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
+    if (signup.password.length < 8) { setError(t('app.err_pw_short')); return; }
+    if (signup.password !== signup.confirm) { setError(t('app.err_pw_mismatch')); return; }
     if (!online) { setError(t('login.offline_error')); return; }
     setBusy(true);
     try {
@@ -189,7 +189,7 @@ export default function LoginPage() {
       setEmail(signup.email.trim());
       setSignup({ name: '', email: '', role: 'operator', password: '', confirm: '' });
       setMode('login');
-      setNotice('Demande envoyée. Vous pourrez vous connecter dès qu\'un administrateur ou un superviseur aura validé votre compte.');
+      setNotice(t('app.signup_sent'));
     } catch (err) {
       setError(err?.response?.data?.detail && typeof err.response.data.detail === 'string'
         ? err.response.data.detail
@@ -220,20 +220,20 @@ export default function LoginPage() {
             <em>{t('login.brand_subtitle')}</em>
           </header>
 
-          <div className="login__tabs" role="tablist" aria-label="Connexion ou inscription">
+          <div className="login__tabs" role="tablist" aria-label={`${t('app.tab_login')} / ${t('app.tab_signup')}`}>
             <button type="button" role="tab" aria-selected={mode === 'login'}
               className={`login__tab${mode === 'login' ? ' is-active' : ''}`} onClick={() => switchMode('login')}>
-              Se connecter
+              {t('app.tab_login')}
             </button>
             <button type="button" role="tab" aria-selected={mode === 'signup'}
               className={`login__tab${mode === 'signup' ? ' is-active' : ''}`} onClick={() => switchMode('signup')}>
-              Créer un compte
+              {t('app.tab_signup')}
             </button>
           </div>
 
           {mode === 'login' ? (
             <>
-              <p className="login__hint">Choisissez votre rôle, puis saisissez votre mot de passe.</p>
+              <p className="login__hint">{t('app.hint_role')}</p>
               <nav className="login__chips" aria-label={t('login.demo_title')}>
                 {ROLES.map((r) => (
                   <button key={r.key} type="button" aria-pressed={role === r.key}
@@ -245,40 +245,40 @@ export default function LoginPage() {
               </nav>
 
               <form className="login__form" onSubmit={submit}>
-                <label htmlFor="login-email">Email</label>
+                <label htmlFor="login-email">{t('login.email')}</label>
                 <input id="login-email" type="email" autoComplete="username" required value={email}
                   onChange={(e) => { setEmail(e.target.value); setRole(null); }} />
-                <label htmlFor="login-password">Mot de passe</label>
+                <label htmlFor="login-password">{t('login.password')}</label>
                 <input id="login-password" type="password" autoComplete="current-password" required value={password}
                   onChange={(e) => setPassword(e.target.value)} />
                 <button type="submit" className="login__role" disabled={busy || !online}>
-                  {busy && <Loader2 size={18} className="login__spin" />} Se connecter
+                  {busy && <Loader2 size={18} className="login__spin" />} {busy ? t('login.submitting') : t('login.submit')}
                 </button>
               </form>
             </>
           ) : (
             <form className="login__form" onSubmit={submitSignup}>
               <p className="login__hint" style={{ marginBottom: '.25rem' }}>
-                Votre demande sera validée par un administrateur ou un superviseur avant la première connexion.
+                {t('app.signup_hint')}
               </p>
-              <label htmlFor="su-name">Nom complet</label>
+              <label htmlFor="su-name">{t('app.full_name')}</label>
               <input id="su-name" required autoComplete="name" value={signup.name}
                 onChange={(e) => setSignup({ ...signup, name: e.target.value })} />
-              <label htmlFor="su-email">Email</label>
+              <label htmlFor="su-email">{t('login.email')}</label>
               <input id="su-email" type="email" required autoComplete="email" value={signup.email}
                 onChange={(e) => setSignup({ ...signup, email: e.target.value })} />
-              <label htmlFor="su-role">Fonction</label>
+              <label htmlFor="su-role">{t('app.function')}</label>
               <select id="su-role" value={signup.role} onChange={(e) => setSignup({ ...signup, role: e.target.value })}>
-                {SIGNUP_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                {SIGNUP_ROLES.map((r) => <option key={r.key} value={r.key}>{t(r.labelKey)}</option>)}
               </select>
-              <label htmlFor="su-pass">Mot de passe (8 caractères minimum)</label>
+              <label htmlFor="su-pass">{t('app.password_min')}</label>
               <input id="su-pass" type="password" required minLength={8} autoComplete="new-password" value={signup.password}
                 onChange={(e) => setSignup({ ...signup, password: e.target.value })} />
-              <label htmlFor="su-confirm">Confirmer le mot de passe</label>
+              <label htmlFor="su-confirm">{t('app.password_confirm')}</label>
               <input id="su-confirm" type="password" required minLength={8} autoComplete="new-password" value={signup.confirm}
                 onChange={(e) => setSignup({ ...signup, confirm: e.target.value })} />
               <button type="submit" className="login__role" disabled={busy || !online}>
-                {busy && <Loader2 size={18} className="login__spin" />} Envoyer la demande
+                {busy && <Loader2 size={18} className="login__spin" />} {t('app.signup_submit')}
               </button>
             </form>
           )}

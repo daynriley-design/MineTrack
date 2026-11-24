@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutGrid, LogOut, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +18,7 @@ import LanguageSwitcher from './LanguageSwitcher';
  */
 export default function AppShell({ roleLabel, links, dock = [], fab, flushPaths = [], children }) {
   const { logout, user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -57,7 +59,7 @@ export default function AppShell({ roleLabel, links, dock = [], fab, flushPaths 
       </div>
       <button type="button" onClick={handleLogout} className="mt-side__link" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--color-ruby)', fontFamily: 'inherit' }}>
         <LogOut size={19} />
-        Déconnexion
+        {t('user.logout')}
       </button>
     </div>
   );
@@ -83,14 +85,14 @@ export default function AppShell({ roleLabel, links, dock = [], fab, flushPaths 
         {children ?? <Outlet />}
       </main>
 
-      <nav className="mt-dock" aria-label="Navigation principale">
+      <nav className="mt-dock" aria-label={t('app.main_nav')}>
         <div className="mt-dock__pill">
           {dock.map(({ to, label, icon: Icon }) => (
             <Link key={to} to={to} aria-label={label} title={label} className={`mt-dock__item${isActive(to) ? ' is-active' : ''}`}>
               <Icon size={23} strokeWidth={1.8} />
             </Link>
           ))}
-          <button type="button" aria-label="Menu" title="Menu" className="mt-dock__item" onClick={() => setMenuOpen(true)}>
+          <button type="button" aria-label={t('app.menu')} title={t('app.menu')} className="mt-dock__item" onClick={() => setMenuOpen(true)}>
             <LayoutGrid size={23} strokeWidth={1.8} />
             {pending && <span className="mt-round__dot" />}
           </button>
@@ -105,11 +107,11 @@ export default function AppShell({ roleLabel, links, dock = [], fab, flushPaths 
       {menuOpen && (
         <>
           <div className="mt-sheet-backdrop" onClick={() => setMenuOpen(false)} />
-          <div className="mt-sheet" role="dialog" aria-label="Menu">
+          <div className="mt-sheet" role="dialog" aria-label={t('app.menu')}>
             <div className="mt-sheet__grip" />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <h3 style={{ margin: 0, fontWeight: 500 }}>Menu</h3>
-              <button type="button" className="mt-round" style={{ width: 38, height: 38 }} aria-label="Fermer" onClick={() => setMenuOpen(false)}>
+              <h3 style={{ margin: 0, fontWeight: 500 }}>{t('app.menu')}</h3>
+              <button type="button" className="mt-round" style={{ width: 38, height: 38 }} aria-label={t('app.close')} onClick={() => setMenuOpen(false)}>
                 <X size={18} />
               </button>
             </div>

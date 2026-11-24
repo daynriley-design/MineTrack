@@ -2,34 +2,24 @@ import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import api, { dashboardAPI, miniReportsAPI, faceExaminationsAPI, supervisorAPI } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import PageHero from '../../components/PageHero';
 import {
   Settings2, Bell, MapPinned, ArrowRight, CalendarDays, Clock3, MapPin, TrendingUp, Truck,
   ShieldAlert, Activity, Map as MapIcon, Wrench, FileText, Eye, ClipboardPlus,
 } from 'lucide-react';
 
-// Libelles des 9 rapports de shift (+ 2 sous-rapports) cote superviseur.
-const REPORT_LABELS = {
-  safety: 'Sécurité',
-  concerns: 'Préoccupations / observations',
-  blasting: 'Minage (tirs)',
-  shift_preparation: 'Préparation du shift',
-  construction_service: 'Construction & services',
-  tramming_machine_status: 'Tramming & machines',
-  drilling_machine_status: 'Machines de forage',
-  longhole_report: 'Long-trou',
-  critical_material: 'Matériel critique',
-  re_entry: 'Ré-entrée',
-  vent_service: 'Ventilation',
-};
+// Libelles des rapports de shift : management.report_* (9 rapports) + 2 sous-rapports.
+const EXTRA_REPORTS = { re_entry: 'sup.rt_re_entry', vent_service: 'sup.rt_vent_service' };
 
 const SHIFT_HOURS = { day: '06:00 – 18:00', night: '18:00 – 06:00' };
 
 const currentShift = (d) => (d.getHours() >= 6 && d.getHours() < 18 ? 'day' : 'night');
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const shortDay = (iso) => {
+const shortDay = (iso, locale = 'fr-FR') => {
   if (!iso) return '—';
   const d = new Date(`${iso}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', '');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(locale, { day: '2-digit', month: 'short' }).replace('.', '');
 };
 const asList = (data) => (Array.isArray(data) ? data : data?.items || []);
 
@@ -62,7 +52,9 @@ function Panel({ title, icon, children, span }) {
 
 export default function SupervisorDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const outlet = useOutletContext() || {};
+  const reportLabel = (type) => (EXTRA_REPORTS[type] ? t(EXTRA_REPORTS[type]) : t(`management.report_${type}`, { defaultValue: type }));
   const [now, setNow] = useState(new Date());
   const [stats, setStats] = useState(null);
   const [charts, setCharts] = useState(null);
@@ -113,10 +105,6 @@ export default function SupervisorDashboard() {
   const pegProgress = charts?.peg_progress || [];
   const ptoDays = charts?.pto_by_day || [];
 
-  const hour = now.getHours();
-  const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
-  const rawDate = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const dateLabel = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
 
   const alertItems = [
     ...alerts.incidents.map((a) => ({ id: `i-${a.id ?? a._id}`, kind: 'incident', title: a.title || a.type || a.description || 'Incident', meta: [a.peg_id, a.severity].filter(Boolean).join(' · '), at: a.created_at })),
@@ -125,33 +113,29 @@ export default function SupervisorDashboard() {
 
   return (
     <div>
-      {/* En-tete degrade */}
-      <header className="mt-hero">
-        <div className="mt-hero__bar">
-          <Link to="/supervisor/profile" className="mt-round" aria-label="Profil et réglages"><Settings2 size={21} strokeWidth={1.7} /></Link>
-          <div className="mt-hero__actions">
-            <Link to="/supervisor/alerts" className="mt-round" aria-label="Alertes">
+      {/* En-tete degrade (date et salutation traduites) */}
+      <PageHero
+        subtitle={`${user?.name || t('user.role_supervisor')},`}
+        left={<Link to="/supervisor/profile" className="mt-round" aria-label={t('sup.profile_settings')}><Settings2 size={21} strokeWidth={1.7} /></Link>}
+        actions={(
+          <>
+            <Link to="/supervisor/alerts" className="mt-round" aria-label={t('app.alerts')}>
               <Bell size={20} strokeWidth={1.7} />
               {alertCount > 0 && <span className="mt-round__dot" />}
             </Link>
-            <Link to="/supervisor/map" className="mt-round" aria-label="Carte"><MapPinned size={20} strokeWidth={1.7} /></Link>
-          </div>
-        </div>
-        <p className="mt-hero__date">{dateLabel}</p>
-        <h1 className="mt-hero__title">
-          {greeting}
-          <span>{user?.name || 'Superviseur'},</span>
-        </h1>
-      </header>
+            <Link to="/supervisor/map" className="mt-round" aria-label={t('app.map_short')}><MapPinned size={20} strokeWidth={1.7} /></Link>
+          </>
+        )}
+      />
 
       <div className="mt-body mt-body--wide">
         {/* Shift en cours */}
         <Link to="/supervisor/shift-reports" className="mt-card mt-card--row mt-span">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="mt-card__eyebrow">Shift en cours · {siteName}</p>
-            <p className="mt-card__title">{shift === 'day' ? 'Shift de jour' : 'Shift de nuit'} · {SHIFT_HOURS[shift]}</p>
+            <p className="mt-card__eyebrow">{t('sup.shift_now')} · {siteName}</p>
+            <p className="mt-card__title">{shift === 'day' ? t('sup.day_shift') : t('sup.night_shift')} · {SHIFT_HOURS[shift]}</p>
           </div>
-          <span className="mt-pill">en cours</span>
+          <span className="mt-pill">{t('sup.in_progress')}</span>
           <ArrowRight size={21} strokeWidth={1.6} className="mt-card__arrow" />
         </Link>
 
@@ -160,28 +144,28 @@ export default function SupervisorDashboard() {
           <Link to="/supervisor/shift-reports" className="mt-card mt-stat">
             <div className="mt-stat__top"><CalendarDays size={21} strokeWidth={1.7} /><ArrowRight size={21} strokeWidth={1.6} className="mt-card__arrow" /></div>
             <span className="mt-stat__value">{todayReports.length}</span>
-            <span className="mt-stat__label">Rapports aujourd'hui</span>
+            <span className="mt-stat__label">{t('sup.reports_today')}</span>
           </Link>
           <Link to="/supervisor/alerts" className="mt-card mt-stat">
             <div className="mt-stat__top"><Clock3 size={21} strokeWidth={1.7} /><ArrowRight size={21} strokeWidth={1.6} className="mt-card__arrow" /></div>
             <span className="mt-stat__value">{alertCount}</span>
-            <span className="mt-stat__label">Alertes à traiter</span>
+            <span className="mt-stat__label">{t('sup.alerts_todo')}</span>
           </Link>
         </div>
 
         {/* Derniers rapports de shift */}
         <div className="mt-section-head mt-span">
-          <h3>Derniers rapports de shift</h3>
-          <Link to="/supervisor/shift-reports" aria-label="Tous les rapports de shift"><ArrowRight size={21} strokeWidth={1.6} /></Link>
+          <h3>{t('sup.recent_reports')}</h3>
+          <Link to="/supervisor/shift-reports" aria-label={t('sup.all_reports')}><ArrowRight size={21} strokeWidth={1.6} /></Link>
         </div>
         <div className="mt-span">
           {recent.length === 0 ? (
             <Link to="/supervisor/shift-reports" className="mt-card mt-card--row">
               <div className="mt-list__icon" style={{ background: '#FFF1E6', color: 'var(--color-ore-dark)' }}><ClipboardPlus size={18} /></div>
               <div style={{ flex: 1 }}>
-                <p className="mt-card__title" style={{ margin: 0 }}>Aucun rapport de shift pour l'instant</p>
+                <p className="mt-card__title" style={{ margin: 0 }}>{t('sup.no_reports')}</p>
                 <p className="mt-card__eyebrow" style={{ fontSize: '0.85rem' }}>
-                  {shiftReports.length}/9 rapports saisis pour ce shift — appuyez pour commencer
+                  {t('sup.no_reports_hint', { count: shiftReports.length })}
                 </p>
               </div>
               <ArrowRight size={21} strokeWidth={1.6} className="mt-card__arrow" />
@@ -195,14 +179,14 @@ export default function SupervisorDashboard() {
                     <div className="mt-event__head">
                       <span className="mt-event__day">{shortDay(r.report_date)}</span>
                       <span className="mt-event__time">
-                        {dup && <span className="mt-pill mt-pill--soft-red">Doublon</span>}
-                        {r.shift === 'night' ? 'Nuit' : 'Jour'} · {SHIFT_HOURS[r.shift] || '—'}
+                        {dup && <span className="mt-pill mt-pill--soft-red">{t('sup.duplicate')}</span>}
+                        {r.shift === 'night' ? t('sup.night') : t('sup.day')} · {SHIFT_HOURS[r.shift] || '—'}
                       </span>
                     </div>
                     <div className="mt-event__body">
                       <div style={{ minWidth: 0 }}>
-                        <p className="mt-event__title">{REPORT_LABELS[r.report_type] || r.report_type}</p>
-                        <span className="mt-event__meta"><MapIcon size={15} strokeWidth={1.6} />{r.site_name || 'Site'}</span>
+                        <p className="mt-event__title">{reportLabel(r.report_type)}</p>
+                        <span className="mt-event__meta"><MapIcon size={15} strokeWidth={1.6} />{r.site_name || t('sup.site')}</span>
                       </div>
                       {r.created_by && (
                         <span title={r.created_by} style={{ width: 30, height: 30, borderRadius: '50%', background: '#FFF1E6', color: 'var(--color-ore-dark)', display: 'grid', placeItems: 'center', fontSize: '0.8rem', fontWeight: 600, flexShrink: 0 }}>
@@ -218,15 +202,15 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* Indicateurs */}
-        <div className="mt-section-head mt-span"><h3>Indicateurs</h3></div>
+        <div className="mt-section-head mt-span"><h3>{t('sup.indicators')}</h3></div>
         <div className="mt-grid-2 mt-span" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {[
-            { label: 'PEG actifs', value: pegActifs, icon: <MapPin size={20} strokeWidth={1.7} /> },
-            { label: 'Avancement moyen', value: `${avgProgress}%`, icon: <TrendingUp size={20} strokeWidth={1.7} /> },
-            { label: 'Tonnage', value: `${total} t`, icon: <Truck size={20} strokeWidth={1.7} /> },
-            { label: 'Incidents HSE', value: incidents, icon: <ShieldAlert size={20} strokeWidth={1.7} />, alert: incidents > 0 },
-            { label: 'Engins en panne', value: equipment, icon: <Wrench size={20} strokeWidth={1.7} />, alert: equipment > 0 },
-            { label: 'Meilleure équipe', value: teams[0] ? `${teams[0].avg_progress}%` : '—', icon: <Activity size={20} strokeWidth={1.7} /> },
+            { label: t('sup.active_pegs'), value: pegActifs, icon: <MapPin size={20} strokeWidth={1.7} /> },
+            { label: t('sup.avg_progress'), value: `${avgProgress}%`, icon: <TrendingUp size={20} strokeWidth={1.7} /> },
+            { label: t('sup.tonnage'), value: `${total} t`, icon: <Truck size={20} strokeWidth={1.7} /> },
+            { label: t('sup.hse_incidents'), value: incidents, icon: <ShieldAlert size={20} strokeWidth={1.7} />, alert: incidents > 0 },
+            { label: t('sup.broken_equipment'), value: equipment, icon: <Wrench size={20} strokeWidth={1.7} />, alert: equipment > 0 },
+            { label: t('sup.best_team'), value: teams[0] ? `${teams[0].avg_progress}%` : '—', icon: <Activity size={20} strokeWidth={1.7} /> },
           ].map((k) => (
             <div key={k.label} className="mt-card mt-stat" style={{ minHeight: 112 }}>
               <div className="mt-stat__top" style={{ color: k.alert ? 'var(--color-ruby)' : 'var(--color-white)' }}>{k.icon}</div>
@@ -237,23 +221,23 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* Activite detaillee */}
-        <div className="mt-section-head mt-span"><h3>Activité</h3></div>
+        <div className="mt-section-head mt-span"><h3>{t('sup.activity')}</h3></div>
 
-        <Panel title="Production par jour" icon={<Truck size={18} strokeWidth={1.7} />}>
-          {prodDays.length === 0 ? <p className="mt-empty">Aucune donnée de production.</p>
+        <Panel title={t('sup.prod_per_day')} icon={<Truck size={18} strokeWidth={1.7} />}>
+          {prodDays.length === 0 ? <p className="mt-empty">{t('sup.no_prod')}</p>
             : <MiniBars rows={prodDays} valueKey="tonnage" unit=" t" color="var(--color-ore)" />}
         </Panel>
 
-        <Panel title="Incidents par jour" icon={<ShieldAlert size={18} strokeWidth={1.7} />}>
-          {incidentDays.length === 0 ? <p className="mt-empty">Aucun incident enregistré.</p>
+        <Panel title={t('sup.inc_per_day')} icon={<ShieldAlert size={18} strokeWidth={1.7} />}>
+          {incidentDays.length === 0 ? <p className="mt-empty">{t('sup.no_inc')}</p>
             : <MiniBars rows={incidentDays} valueKey="count" unit="" color={(r) => (r.count >= 3 ? 'var(--color-ruby)' : r.count >= 2 ? 'var(--color-gold)' : 'var(--color-emerald)')} />}
         </Panel>
 
-        <Panel title="Avancement par PEG" icon={<MapPin size={18} strokeWidth={1.7} />}>
-          {pegProgress.length === 0 ? <p className="mt-empty">Aucun PEG en activité.</p> : (
+        <Panel title={t('sup.peg_progress')} icon={<MapPin size={18} strokeWidth={1.7} />}>
+          {pegProgress.length === 0 ? <p className="mt-empty">{t('sup.no_peg')}</p> : (
             <div className="mt-list">
               {pegProgress.slice(0, 5).map((p) => {
-                const tone = p.progress >= 100 ? ['mt-pill--soft-green', 'Terminé'] : p.progress >= 60 ? ['mt-pill--soft-gray', 'En cours'] : p.progress >= 30 ? ['mt-pill--soft-gray', 'Lent'] : ['mt-pill--soft-red', 'Retard'];
+                const tone = p.progress >= 100 ? ['mt-pill--soft-green', t('sup.done')] : p.progress >= 60 ? ['mt-pill--soft-gray', t('sup.ongoing')] : p.progress >= 30 ? ['mt-pill--soft-gray', t('sup.slow')] : ['mt-pill--soft-red', t('sup.late')];
                 return (
                   <div key={p.peg_id} className="mt-list__item">
                     <div className="mt-list__main">
@@ -269,13 +253,13 @@ export default function SupervisorDashboard() {
           )}
         </Panel>
 
-        <Panel title="Congés (PTO) par jour" icon={<CalendarDays size={18} strokeWidth={1.7} />}>
-          {ptoDays.length === 0 ? <p className="mt-empty">Aucun congé enregistré.</p>
+        <Panel title={t('sup.pto_per_day')} icon={<CalendarDays size={18} strokeWidth={1.7} />}>
+          {ptoDays.length === 0 ? <p className="mt-empty">{t('sup.no_pto')}</p>
             : <MiniBars rows={ptoDays} valueKey="days" unit=" j" color="var(--color-gold)" />}
         </Panel>
 
-        <Panel title="Performance par équipe" icon={<Activity size={18} strokeWidth={1.7} />}>
-          {teams.length === 0 ? <p className="mt-empty">Aucune équipe active.</p> : (
+        <Panel title={t('sup.team_perf')} icon={<Activity size={18} strokeWidth={1.7} />}>
+          {teams.length === 0 ? <p className="mt-empty">{t('sup.no_team')}</p> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               {teams.map((s) => (
                 <div key={s.team}>
@@ -288,24 +272,24 @@ export default function SupervisorDashboard() {
               ))}
             </div>
           )}
-          <p className="mt-empty" style={{ marginTop: '0.9rem', fontSize: '0.85rem' }}>{personnel} personnes actives · {equipment} engin(s) en panne</p>
+          <p className="mt-empty" style={{ marginTop: '0.9rem', fontSize: '0.85rem' }}>{t('sup.team_footer', { people: personnel, broken: equipment })}</p>
         </Panel>
 
-        <Panel title="Face examination — récentes" icon={<Eye size={18} strokeWidth={1.7} />}>
-          {faceExams.length === 0 ? <p className="mt-empty">Aucune inspection de front enregistrée.</p> : (
+        <Panel title={t('sup.face_exams')} icon={<Eye size={18} strokeWidth={1.7} />}>
+          {faceExams.length === 0 ? <p className="mt-empty">{t('sup.no_face')}</p> : (
             <div className="mt-list">
               {faceExams.map((f) => (
                 <div key={f.id ?? f._id} className="mt-list__item">
                   <div className="mt-list__main"><strong>{f.peg_id}</strong><span>{shortDay(f.date)}</span></div>
-                  <span className={`mt-pill ${f.ground_condition === 'safe' ? 'mt-pill--soft-green' : 'mt-pill--soft-red'}`}>{f.ground_condition === 'safe' ? 'Sûr' : 'Danger'}</span>
+                  <span className={`mt-pill ${f.ground_condition === 'safe' ? 'mt-pill--soft-green' : 'mt-pill--soft-red'}`}>{f.ground_condition === 'safe' ? t('sup.safe') : t('sup.danger')}</span>
                 </div>
               ))}
             </div>
           )}
         </Panel>
 
-        <Panel title="Dernières alertes" icon={<Bell size={18} strokeWidth={1.7} />}>
-          {alertItems.length === 0 ? <p className="mt-empty">Aucune alerte ouverte.</p> : (
+        <Panel title={t('sup.last_alerts')} icon={<Bell size={18} strokeWidth={1.7} />}>
+          {alertItems.length === 0 ? <p className="mt-empty">{t('sup.no_alerts')}</p> : (
             <div className="mt-list">
               {alertItems.map((a) => (
                 <Link key={a.id} to="/supervisor/alerts" className="mt-list__item" style={{ textDecoration: 'none' }}>
@@ -320,8 +304,8 @@ export default function SupervisorDashboard() {
           )}
         </Panel>
 
-        <Panel title="Mini-rapports géologue reçus" icon={<FileText size={18} strokeWidth={1.7} />}>
-          {geoReports.length === 0 ? <p className="mt-empty">Aucun rapport reçu pour le moment.</p> : (
+        <Panel title={t('sup.geo_reports')} icon={<FileText size={18} strokeWidth={1.7} />}>
+          {geoReports.length === 0 ? <p className="mt-empty">{t('sup.no_geo')}</p> : (
             <div className="mt-list">
               {geoReports.map((r) => (
                 <div key={r.id ?? r._id} className="mt-list__item" style={{ alignItems: 'flex-start' }}>

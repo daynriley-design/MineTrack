@@ -13,11 +13,11 @@ export default function Layout() {
   const { t } = useTranslation();
 
   if (user?.role === 'management') {
-    const links = [{ to: '/management/reports', label: 'Rapports de shift', icon: ClipboardList }];
+    const links = [{ to: '/management/reports', label: t('app.shift_reports'), icon: ClipboardList }];
     return (
       <AppShell
         brandIcon={Pickaxe}
-        roleLabel="Management"
+        roleLabel={t('app.area_management')}
         links={links}
         dock={links}
         flushPaths={['/management/reports']}
@@ -28,7 +28,7 @@ export default function Layout() {
   const links = [
     { section: t('nav.main'), to: '/admin/operations', label: t('nav.setup'), icon: Settings },
     { to: '/admin/dashboard', label: t('nav.dashboard'), icon: House },
-    { to: '/supervisor/users', label: 'Utilisateurs', icon: UserCog },
+    { to: '/supervisor/users', label: t('app.users'), icon: UserCog },
     { section: t('nav.operations'), to: '/admin/pegs', label: t('nav.pegs'), icon: MapPin },
     { to: '/admin/work-progress', label: t('nav.progress'), icon: Activity },
     { to: '/admin/drilling', label: t('nav.drilling'), icon: Drill },
@@ -42,10 +42,10 @@ export default function Layout() {
     { to: '/admin/financial', label: t('nav.financial'), icon: DollarSign },
     { to: '/admin/reports', label: t('nav.reports'), icon: FileBarChart2 },
     // L'admin a aussi acces aux espaces des autres roles (cf. App.jsx).
-    { section: 'Espaces', to: '/supervisor/dashboard', label: 'Supervision', icon: Eye },
-    { to: '/management/reports', label: 'Management', icon: ClipboardList },
-    { to: '/logistique/dashboard', label: 'Logistique', icon: Package },
-    { to: '/support/dashboard', label: 'Support technique', icon: Headset },
+    { section: t('app.spaces'), to: '/supervisor/dashboard', label: t('app.area_supervision'), icon: Eye },
+    { to: '/management/reports', label: t('app.area_management'), icon: ClipboardList },
+    { to: '/logistique/dashboard', label: t('app.area_logistique'), icon: Package },
+    { to: '/support/dashboard', label: t('app.area_support'), icon: Headset },
   ];
 
   const byPath = (p) => links.find((l) => l.to === p);

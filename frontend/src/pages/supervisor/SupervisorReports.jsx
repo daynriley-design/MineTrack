@@ -3,6 +3,7 @@ import { FileText, Download, Loader2 } from 'lucide-react';
 import api, { dashboardAPI, supervisorAPI, incidentsAPI, equipmentPannesAPI } from '../../api';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import PageHero from '../../components/PageHero';
 
 const KINDS = {
@@ -12,14 +13,15 @@ const KINDS = {
 };
 
 const CONTENT = [
-  { key: 'pegs', label: 'Avancement PEG' },
-  { key: 'production', label: 'Production' },
-  { key: 'hse', label: 'Sécurité / Incidents' },
-  { key: 'equipment', label: 'Équipement' },
-  { key: 'teams', label: 'Performance équipes' },
-  { key: 'shift', label: 'Rapports de shift' },
-  { key: 'finance', label: 'ERP / Finances' },
+  { key: 'pegs', labelKey: 'rep.c_pegs' },
+  { key: 'production', labelKey: 'rep.c_production' },
+  { key: 'hse', labelKey: 'rep.c_hse' },
+  { key: 'equipment', labelKey: 'rep.c_equipment' },
+  { key: 'teams', labelKey: 'rep.c_teams' },
+  { key: 'shift', labelKey: 'rep.c_shift' },
+  { key: 'finance', labelKey: 'rep.c_finance' },
 ];
+const KIND_KEYS = { daily: 'rep.daily', weekly: 'rep.weekly', monthly: 'rep.monthly' };
 
 const REPORT_LABELS = {
   safety: 'Sécurité', concerns: 'Préoccupations', blasting: 'Minage', shift_preparation: 'Préparation du shift',
@@ -35,6 +37,7 @@ const num = (v, d = 0) => Number(v || 0).toLocaleString('fr-FR', { maximumFracti
 export default function SupervisorReports() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [kind, setKind] = useState('daily');
   const [to, setTo] = useState(iso(new Date()));
   const [from, setFrom] = useState(iso(new Date()));
@@ -55,7 +58,7 @@ export default function SupervisorReports() {
 
   const generate = async (e) => {
     e.preventDefault();
-    if (from > to) { toast('La date de début est après la date de fin.', 'error'); return; }
+    if (from > to) { toast(t('rep.err_dates'), 'error'); return; }
     setBusy(true);
     try {
       const safe = (p) => p.then((r) => r.data).catch(() => null);
@@ -189,9 +192,9 @@ export default function SupervisorReports() {
         preparedBy: user?.name || 'Supervision',
         sections,
       });
-      toast('PDF téléchargé', 'success');
+      toast(t('rep.ok'), 'success');
     } catch {
-      toast('Erreur lors de la génération du PDF', 'error');
+      toast(t('rep.err'), 'error');
     } finally {
       setBusy(false);
     }
@@ -199,48 +202,48 @@ export default function SupervisorReports() {
 
   return (
     <div>
-      <PageHero title="Rapports" subtitle="d'opérations" />
+      <PageHero title={t('rep.title')} subtitle={t('rep.subtitle')} />
       <div className="mt-body mt-page mt-form">
         <p className="mt-card__eyebrow" style={{ margin: '0.25rem 0.2rem 0' }}>
-          Compile les données de la période en un rapport PDF : page de garde, table des matières, chapitres et tableaux numérotés.
+          {t('rep.intro')}
         </p>
         <form className="mt-card" onSubmit={generate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label>Type de rapport</label>
+            <label>{t('rep.kind')}</label>
             <div className="mt-chips" style={{ margin: 0, padding: 0 }}>
-              {Object.entries(KINDS).map(([k, v]) => (
+              {Object.keys(KINDS).map((k) => (
                 <button key={k} type="button" aria-pressed={kind === k} className={`mt-chip${kind === k ? ' is-active' : ''}`}
                   style={kind === k ? undefined : { background: 'var(--color-surface-soft)' }} onClick={() => chooseKind(k)}>
-                  {v.label}
+                  {t(KIND_KEYS[k])}
                 </button>
               ))}
             </div>
           </div>
           <div className="mt-grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))' }}>
             <div>
-              <label htmlFor="rp-from">Du</label>
+              <label htmlFor="rp-from">{t('rep.from')}</label>
               <input id="rp-from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
             </div>
             <div>
-              <label htmlFor="rp-to">Au</label>
+              <label htmlFor="rp-to">{t('rep.to')}</label>
               <input id="rp-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
             <div>
-              <label htmlFor="rp-company">Entreprise</label>
+              <label htmlFor="rp-company">{t('rep.company')}</label>
               <select id="rp-company" value={company} onChange={(e) => setCompany(e.target.value)}>
                 <option>Reliant Congo</option>
-                <option>Toutes les entreprises</option>
+                <option value="Toutes les entreprises">{t('rep.all_companies')}</option>
               </select>
             </div>
           </div>
           <div>
-            <label>Chapitres à inclure</label>
+            <label>{t('rep.chapters')}</label>
             <div className="mt-grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '0.6rem' }}>
               {CONTENT.map((c) => (
                 <label key={c.key} className="form-checkbox-label" style={{ margin: 0, color: 'var(--color-chalk)' }}>
                   <input type="checkbox" className="form-checkbox" checked={content[c.key]}
                     onChange={(e) => setContent({ ...content, [c.key]: e.target.checked })} />
-                  {c.label}
+                  {t(c.labelKey)}
                 </label>
               ))}
             </div>
@@ -248,14 +251,14 @@ export default function SupervisorReports() {
           <div>
             <button type="submit" className="mt-btn" disabled={busy}>
               {busy ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
-              {busy ? 'Génération du PDF…' : 'Générer le rapport PDF'}
+              {busy ? t('rep.generating') : t('rep.generate')}
             </button>
           </div>
         </form>
         <section className="mt-card mt-card--row">
           <div className="mt-list__icon" style={{ background: '#FFF1E6', color: 'var(--color-ore-dark)' }}><FileText size={18} /></div>
           <p className="mt-card__eyebrow" style={{ margin: 0, fontSize: '0.88rem' }}>
-            Le rapport reprend les données réellement saisies : un chapitre sans donnée l'indique au lieu d'afficher des chiffres d'exemple.
+            {t('rep.note')}
           </p>
         </section>
       </div>

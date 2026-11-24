@@ -1,6 +1,17 @@
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 
-const greetingFor = (h) => (h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir');
+// Langue de l'interface -> locale de date du navigateur (repli : francais).
+const DATE_LOCALES = { fr: 'fr-FR', en: 'en-GB', sw: 'sw-TZ', ln: 'ln-CD' };
+
+function formatToday(lang) {
+  let locale = DATE_LOCALES[lang] || 'fr-FR';
+  try {
+    if (!Intl.DateTimeFormat.supportedLocalesOf([locale]).length) locale = 'fr-FR';
+  } catch { locale = 'fr-FR'; }
+  const raw = new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
 
 /**
  * En-tete degrade de la maquette : date, salutation + nom, et une rangee
@@ -9,13 +20,17 @@ const greetingFor = (h) => (h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'B
  */
 export default function PageHero({ title, subtitle, actions, left, children }) {
   const { user } = useAuth();
-  const now = new Date();
-  const raw = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const date = raw.charAt(0).toUpperCase() + raw.slice(1);
+  const { t, i18n } = useTranslation();
+  const hour = new Date().getHours();
+  const greeting = t(hour < 12 ? 'app.morning' : hour < 18 ? 'app.afternoon' : 'app.evening');
+  // i18n.language d'abord : resolvedLanguage reste sur « fr » tant que la
+  // langue choisie est chargee a la demande (voir i18n.js).
+  const date = formatToday((i18n.language || i18n.resolvedLanguage || 'fr').slice(0, 2));
+
   let second = subtitle ?? `${user?.name || ''},`;
   // Comptes de demo nommes comme le role (« Support technique ») : on evite le doublon.
   if (title && second.replace(/,$/, '').trim().toLowerCase() === title.toLowerCase()) {
-    second = `${greetingFor(now.getHours())} !`;
+    second = t('app.hello');
   }
 
   return (
@@ -28,7 +43,7 @@ export default function PageHero({ title, subtitle, actions, left, children }) {
       )}
       <p className="mt-hero__date">{date}</p>
       <h1 className="mt-hero__title">
-        {title || greetingFor(now.getHours())}
+        {title || greeting}
         <span>{second}</span>
       </h1>
       {children}
