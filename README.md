@@ -6,7 +6,7 @@ Application web full-stack de gestion et de suivi des opérations minières sout
 
 | Couche | Technologie | Détail |
 |--------|-------------|--------|
-| Backend | Python · FastAPI · aiosqlite | port 8001, base SQLite `minetrack.db`, ids TEXT uuid4 |
+| Backend | Python · FastAPI · aiosqlite · pg8000 | port 8001, SQLite par défaut, PostgreSQL avec `DATABASE_URL` |
 | Auth | JWT en cookie httpOnly | pas de token dans la réponse, `withCredentials: true` côté axios |
 | Frontend | React 19 · Vite | port 4000, proxy `/api` vers 8001 |
 | i18n | i18next | fr, sw, ln, kg, lu, en |
@@ -14,14 +14,14 @@ Application web full-stack de gestion et de suivi des opérations minières sout
 | Export | html2canvas + jsPDF | page Rapports |
 | Hors ligne | service worker + file d'attente | les mutations sont mises en file, jamais le login |
 
-> Aucune base MongoDB n'est utilisée : le backend est SQLite via `aiosqlite`, servi par `backend/server.py` (seul point d'entrée ; l'ancien refactor `main.py` a été retiré lors de l'audit de sécurité).
+`backend/server.py` expose l'API FastAPI. `backend/database.py` sélectionne la base au démarrage. SQLite utilise `backend/minetrack.db` par défaut.
 
 ## 🚀 Démarrage rapide
 
 ### Prérequis
 
 1. **Python 3.10+** — [Télécharger](https://python.org)
-2. **Node.js 18+** — [Télécharger](https://nodejs.org)
+2. **Node.js 20.19+ ou 22.12+** — [Télécharger](https://nodejs.org)
 
 ### Option 1 : Script automatique (Windows)
 
@@ -52,9 +52,11 @@ npm run dev                # port 4000
 
 ### Comptes
 
+**Créer un compte** : onglet « Créer un compte » de la page de connexion (nom, email, fonction, mot de passe de 8 caractères minimum). Le compte reste **en attente** jusqu'à sa validation dans la page *Utilisateurs* : un superviseur valide les opérateurs, géologues, logistique et support ; l'administrateur valide tous les rôles. Le rôle administrateur ne peut pas être demandé.
+
 Créés par `backend/create_accounts.py` (idempotent, relançable sans risque). Sur la page de connexion, le rôle pré-remplit l'email ; le mot de passe se saisit.
 
-> ⚠️ Ces mots de passe sont publics : ils ne servent **qu'en local**. Sur un site accessible depuis internet (Vercel), définir la variable `MINETRACK_DEMO_PASSWORD` : elle remplace le mot de passe de tous les comptes de démo.
+> Ces mots de passe de démonstration sont publics et réservés au développement local. `MINETRACK_DEMO_PASSWORD` s'applique à la création des comptes de démo. Les mots de passe des comptes déjà présents doivent être changés séparément.
 
 | Rôle | Email | Mot de passe | Page d'arrivée |
 |------|-------|---------------|-----------------|
@@ -63,8 +65,15 @@ Créés par `backend/create_accounts.py` (idempotent, relançable sans risque). 
 | Superviseur | supervision@minetrack.com | super123 | /supervisor/dashboard |
 | Géologue | geologue@minetrack.com | geo123 | /geologist/dashboard |
 | Opérateur | operateur@minetrack.com | oper123 | /miner/dashboard |
+| Logistique | logistique@minetrack.com | logi123 | /logistique/dashboard |
+| Support technique | support@minetrack.com | support123 | /support/dashboard |
 
-Deux rôles restent à spécifier avec le client et n'ont ni compte ni page : **Logistique** et **Support technique**.
+### Configuration du déploiement
+
+- `DATABASE_URL` sélectionne PostgreSQL, y compris une base Supabase. Sur Vercel, SQLite utilise `/tmp/minetrack.db`, un stockage éphémère. Le démarrage initialise le schéma de la base sélectionnée. Le transfert de données existantes depuis SQLite est une opération séparée.
+- `JWT_SECRET` est requis par le backend pour signer les sessions.
+- `MINETRACK_DEMO_ACCOUNTS=0` désactive la création automatique des comptes de démo sur un déploiement Vercel.
+- `VITE_GA_MEASUREMENT_ID` active Google Analytics lors du build frontend. Les changements de route sont suivis via la mesure améliorée du flux Web GA4, avec le suivi des événements d'historique activé.
 
 ### Données de démonstration (optionnel)
 
@@ -113,7 +122,6 @@ Le layout est saisi à la main, jamais calculé : les angles et directions chang
 
 ## ⚠️ Dette connue
 
-- **Rôles manquants** : `logistique` et `support` n'existent ni en base, ni dans `ProtectedRoute`, ni dans `SELF_REGISTER_ROLES`. Migration RBAC à faire vers les 5 rôles complets.
 - **Règle ESLint `react-hooks/set-state-in-effect`** : jamais de `setState` synchrone dans le corps d'un `useEffect` — appeler l'API et poser l'état dans le `.then`.
 - **Chemins d'import** : les pages dans un sous-dossier importent `'../../api'`, pas `'../api'`.
 - **Encodage de `START_MINETRACK.bat`** : ASCII pur, fins de ligne CRLF. Ne jamais y introduire d'accents ou de caractères de cadre — `cmd` les interprète comme des commandes.

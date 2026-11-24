@@ -49,7 +49,8 @@ TABLES = {
             password TEXT NOT NULL,
             name TEXT,
             role TEXT DEFAULT 'operator',
-            created_at TEXT
+            created_at TEXT,
+            status TEXT DEFAULT 'active'
         )
     """,
     "pegs": """
@@ -408,6 +409,16 @@ async def ensure_db():
             await db.execute(sql)
         await database.protect_tables(db, TABLES.keys())
         await db.commit()
+    # Migration : colonne users.status (comptes « pending » de l'inscription publique).
+    async with database.connect() as db:
+        try:
+            if database.IS_POSTGRES:
+                await db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'")
+            else:
+                await db.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
+            await db.commit()
+        except Exception:
+            pass  # SQLite : colonne deja presente
     await operations.init_operations_tables()
     if os.environ.get("MINETRACK_DEMO_ACCOUNTS") == "1":
         from create_accounts import ensure_accounts
@@ -445,10 +456,13 @@ app.include_router(operations.router)
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
-# Inscription publique : FERMEE par defaut (audit). Avant, n'importe qui
-# pouvait s'inscrire « supervisor » puis lister/supprimer tous les comptes.
-# MINETRACK_ALLOW_REGISTER=1 la rouvre, uniquement pour le role operateur.
-SELF_REGISTER_ROLES = {"operator"}
+# Inscription publique : le compte est cree EN ATTENTE (status='pending') avec
+# le role demande. Il ne peut pas se connecter tant qu'un admin ou un
+# superviseur ne l'a pas valide (page Utilisateurs). Le role admin ne peut
+# pas etre demande. (Avant l'audit : inscription « supervisor » immediate.)
+SELF_REGISTER_ROLES = {"operator", "geologist", "logistique", "support", "supervisor", "management"}
+REGISTER_MAX_PER_HOUR = 5
+_register_attempts: dict = {}
 
 # Limite anti force brute sur /login : N echecs par (IP, email) sur la fenetre.
 LOGIN_MAX_FAILURES = 10
@@ -480,27 +494,37 @@ def _recent_failures(key) -> list:
 
 
 @app.post("/api/auth/register")
-async def register(user_input: UserCreate, request: Request, response: Response):
-    if os.environ.get("MINETRACK_ALLOW_REGISTER") != "1":
-        raise HTTPException(status_code=403, detail="Inscription désactivée : demandez un compte à l'administrateur")
+async def register(user_input: UserCreate, request: Request):
+    """Demande de compte : creee en attente, sans session, a valider par l'equipe."""
+    ip = _client_ip(request)
+    now_ts = datetime.now(timezone.utc).timestamp()
+    recent = [t for t in _register_attempts.get(ip, []) if t > now_ts - 3600]
+    if len(recent) >= REGISTER_MAX_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Trop de demandes : réessayez dans une heure")
+    _register_attempts[ip] = recent + [now_ts]
+
+    email = (user_input.email or "").lower().strip()
+    name = (user_input.name or "").strip()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="Email invalide")
+    if not name:
+        raise HTTPException(status_code=422, detail="Nom requis")
     if len(user_input.password or "") < 8:
         raise HTTPException(status_code=422, detail="Mot de passe : 8 caractères minimum")
-    email = user_input.email.lower().strip()
-    safe_role = "operator"
+    if user_input.role not in SELF_REGISTER_ROLES:
+        raise HTTPException(status_code=422, detail="Rôle non disponible à l'inscription")
     async with database.connect() as db:
-        async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as cur:
+        async with db.execute("SELECT 1 FROM users WHERE email=?", (email,)) as cur:
             if await cur.fetchone():
-                raise HTTPException(status_code=400, detail="Email already registered")
-        uid = str(uuid.uuid4())
+                raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email")
         await db.execute(
-            "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (uid, email, hash_password(user_input.password), user_input.name,
-             safe_role, datetime.now(timezone.utc).isoformat())
+            "INSERT INTO users (id, email, password, name, role, created_at, status) VALUES (?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), email, hash_password(user_input.password), name,
+             user_input.role, datetime.now(timezone.utc).isoformat(), "pending"),
         )
         await db.commit()
-    token = create_access_token({"sub": uid, "email": email, "role": safe_role, "name": user_input.name})
-    _set_session_cookie(response, request, token)
-    return {"message": "Registered", "email": email, "role": safe_role, "name": user_input.name}
+    return {"message": "Demande envoyée : un administrateur ou un superviseur doit valider votre compte.",
+            "status": "pending"}
 
 
 @app.post("/api/auth/login")
@@ -524,6 +548,8 @@ async def login(user_input: UserLogin, request: Request, response: Response):
         _login_failures.setdefault(key, []).append(datetime.now(timezone.utc).timestamp())
         raise HTTPException(status_code=401, detail="Invalid credentials")
     _login_failures.pop(key, None)
+    if (valid_user["status"] or "active") != "active":
+        raise HTTPException(status_code=403, detail="Compte en attente de validation par un administrateur ou un superviseur")
 
     token = create_access_token({"sub": valid_user["id"], "email": email, "role": valid_user["role"], "name": valid_user["name"]})
     _set_session_cookie(response, request, token)
@@ -545,9 +571,10 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 async def list_users(current_user: dict = Depends(require_role("supervisor", "admin"))):
     async with database.connect() as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC") as cur:
+        async with db.execute("SELECT id, email, name, role, created_at, status FROM users ORDER BY created_at DESC") as cur:
             rows = await cur.fetchall()
-            return [{"id": r["id"], "email": r["email"], "name": r["name"], "role": r["role"], "created_at": r["created_at"]} for r in rows]
+            return [{"id": r["id"], "email": r["email"], "name": r["name"], "role": r["role"],
+                     "created_at": r["created_at"], "status": r["status"] or "active"} for r in rows]
 
 
 ALL_ROLES = {"admin", "management", "supervisor", "logistique", "support", "geologist", "operator"}
@@ -587,6 +614,21 @@ async def create_user(body: StaffCreate, current_user: dict = Depends(require_ro
         )
         await db.commit()
     return {"id": uid, "email": email, "name": body.name.strip(), "role": body.role, "created_at": created}
+
+
+@app.post("/api/supervisor/users/{user_id}/approve")
+async def approve_user(user_id: str, current_user: dict = Depends(require_role("supervisor", "admin"))):
+    """Valide une demande de compte (status pending -> active)."""
+    async with database.connect() as db:
+        async with db.execute("SELECT role, status FROM users WHERE id=?", (user_id,)) as cur:
+            target = await cur.fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+        if current_user.get("role") != "admin" and target[0] not in SUPERVISOR_CREATABLE:
+            raise HTTPException(status_code=403, detail="Seul un administrateur peut valider ce rôle")
+        await db.execute("UPDATE users SET status='active' WHERE id=?", (user_id,))
+        await db.commit()
+    return {"message": "Compte validé"}
 
 
 @app.delete("/api/supervisor/users/{user_id}")

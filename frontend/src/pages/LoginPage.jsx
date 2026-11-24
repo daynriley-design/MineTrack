@@ -16,6 +16,16 @@ const ROLE_EMAILS = {
   support: 'support@minetrack.com',
 };
 
+// Fonctions proposees a l'inscription (le serveur refuse « admin »).
+const SIGNUP_ROLES = [
+  { key: 'operator', label: 'Opérateur / mineur' },
+  { key: 'geologist', label: 'Géologue' },
+  { key: 'logistique', label: 'Logistique' },
+  { key: 'support', label: 'Support technique' },
+  { key: 'supervisor', label: 'Superviseur' },
+  { key: 'management', label: 'Management' },
+];
+
 const LANGUAGES = [
   { code: 'fr', label: 'Français' },
   { code: 'sw', label: 'Kiswahili' },
@@ -78,6 +88,11 @@ box-shadow:0 6px 16px rgba(238, 155, 95,.22);cursor:pointer;transition:filter .1
 .login__chip{border:0;border-radius:999px;padding:.45rem .85rem;background:#F4F5F7;color:var(--txt);font:inherit;font-size:.85rem;cursor:pointer}
 .login__chip:hover{background:#ECEDF0}
 .login__chip.is-active{background:#FFF1E6;color:#A65218;font-weight:600}
+.login__tabs{display:grid;grid-template-columns:1fr 1fr;gap:.25rem;padding:.25rem;margin-bottom:1rem;border-radius:999px;background:#F4F5F7}
+.login__tab{border:0;border-radius:999px;padding:.55rem .75rem;background:transparent;color:var(--muted);font:inherit;font-size:.9rem;cursor:pointer}
+.login__tab.is-active{background:#fff;color:var(--txt);font-weight:600;box-shadow:0 1px 3px rgba(17,18,20,.08)}
+.login__notice{margin:1rem 0 0;padding:.75rem .9rem;border-radius:12px;background:#E7F7EF;color:#047857;font-size:.85rem}
+.login__form select{width:100%;padding:.75rem .9rem;border:1px solid transparent;border-radius:12px;background:#F7F8FA;color:var(--txt);font:inherit;font-size:.95rem}
 .login__form{display:grid;gap:.4rem}
 .login__form label{font-size:.8rem;color:var(--muted);margin-top:.35rem}
 .login__form input{width:100%;padding:.75rem .9rem;border:1px solid transparent;border-radius:12px;background:#F7F8FA;color:var(--txt);font:inherit;font-size:.95rem;outline:none}
@@ -94,13 +109,16 @@ box-shadow:0 6px 16px rgba(238, 155, 95,.22);cursor:pointer;transition:filter .1
 export default function LoginPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
 
+  const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [signup, setSignup] = useState({ name: '', email: '', role: 'operator', password: '', confirm: '' });
   const [online, setOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -142,10 +160,40 @@ export default function LoginPage() {
       const status = err?.response?.status;
       setError(
         status === 401 ? t('login.error_invalid')
-          : status === 429 ? 'Trop de tentatives : réessayez dans 15 minutes.'
-            : t('login.error_server')
+          : status === 403 ? 'Votre compte est en attente de validation par un administrateur ou un superviseur.'
+            : status === 429 ? 'Trop de tentatives : réessayez dans 15 minutes.'
+              : t('login.error_server')
       );
       setPassword('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const switchMode = (next) => {
+    setMode(next);
+    setError('');
+    setNotice('');
+  };
+
+  const submitSignup = async (e) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (signup.password.length < 8) { setError('Mot de passe : 8 caractères minimum.'); return; }
+    if (signup.password !== signup.confirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
+    if (!online) { setError(t('login.offline_error')); return; }
+    setBusy(true);
+    try {
+      await register({ name: signup.name.trim(), email: signup.email.trim(), role: signup.role, password: signup.password });
+      setEmail(signup.email.trim());
+      setSignup({ name: '', email: '', role: 'operator', password: '', confirm: '' });
+      setMode('login');
+      setNotice('Demande envoyée. Vous pourrez vous connecter dès qu\'un administrateur ou un superviseur aura validé votre compte.');
+    } catch (err) {
+      setError(err?.response?.data?.detail && typeof err.response.data.detail === 'string'
+        ? err.response.data.detail
+        : t('login.error_server'));
     } finally {
       setBusy(false);
     }
@@ -172,28 +220,70 @@ export default function LoginPage() {
             <em>{t('login.brand_subtitle')}</em>
           </header>
 
-          <p className="login__hint">Choisissez votre rôle, puis saisissez votre mot de passe.</p>
-          <nav className="login__chips" aria-label={t('login.demo_title')}>
-            {ROLES.map((r) => (
-              <button key={r.key} type="button" aria-pressed={role === r.key}
-                className={`login__chip${role === r.key ? ' is-active' : ''}`}
-                onClick={() => pickRole(r.key)}>
-                {t(r.labelKey)}
-              </button>
-            ))}
-          </nav>
-
-          <form className="login__form" onSubmit={submit}>
-            <label htmlFor="login-email">Email</label>
-            <input id="login-email" type="email" autoComplete="username" required value={email}
-              onChange={(e) => { setEmail(e.target.value); setRole(null); }} />
-            <label htmlFor="login-password">Mot de passe</label>
-            <input id="login-password" type="password" autoComplete="current-password" required value={password}
-              onChange={(e) => setPassword(e.target.value)} />
-            <button type="submit" className="login__role" disabled={busy || !online}>
-              {busy && <Loader2 size={18} className="login__spin" />} Se connecter
+          <div className="login__tabs" role="tablist" aria-label="Connexion ou inscription">
+            <button type="button" role="tab" aria-selected={mode === 'login'}
+              className={`login__tab${mode === 'login' ? ' is-active' : ''}`} onClick={() => switchMode('login')}>
+              Se connecter
             </button>
-          </form>
+            <button type="button" role="tab" aria-selected={mode === 'signup'}
+              className={`login__tab${mode === 'signup' ? ' is-active' : ''}`} onClick={() => switchMode('signup')}>
+              Créer un compte
+            </button>
+          </div>
+
+          {mode === 'login' ? (
+            <>
+              <p className="login__hint">Choisissez votre rôle, puis saisissez votre mot de passe.</p>
+              <nav className="login__chips" aria-label={t('login.demo_title')}>
+                {ROLES.map((r) => (
+                  <button key={r.key} type="button" aria-pressed={role === r.key}
+                    className={`login__chip${role === r.key ? ' is-active' : ''}`}
+                    onClick={() => pickRole(r.key)}>
+                    {t(r.labelKey)}
+                  </button>
+                ))}
+              </nav>
+
+              <form className="login__form" onSubmit={submit}>
+                <label htmlFor="login-email">Email</label>
+                <input id="login-email" type="email" autoComplete="username" required value={email}
+                  onChange={(e) => { setEmail(e.target.value); setRole(null); }} />
+                <label htmlFor="login-password">Mot de passe</label>
+                <input id="login-password" type="password" autoComplete="current-password" required value={password}
+                  onChange={(e) => setPassword(e.target.value)} />
+                <button type="submit" className="login__role" disabled={busy || !online}>
+                  {busy && <Loader2 size={18} className="login__spin" />} Se connecter
+                </button>
+              </form>
+            </>
+          ) : (
+            <form className="login__form" onSubmit={submitSignup}>
+              <p className="login__hint" style={{ marginBottom: '.25rem' }}>
+                Votre demande sera validée par un administrateur ou un superviseur avant la première connexion.
+              </p>
+              <label htmlFor="su-name">Nom complet</label>
+              <input id="su-name" required autoComplete="name" value={signup.name}
+                onChange={(e) => setSignup({ ...signup, name: e.target.value })} />
+              <label htmlFor="su-email">Email</label>
+              <input id="su-email" type="email" required autoComplete="email" value={signup.email}
+                onChange={(e) => setSignup({ ...signup, email: e.target.value })} />
+              <label htmlFor="su-role">Fonction</label>
+              <select id="su-role" value={signup.role} onChange={(e) => setSignup({ ...signup, role: e.target.value })}>
+                {SIGNUP_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+              <label htmlFor="su-pass">Mot de passe (8 caractères minimum)</label>
+              <input id="su-pass" type="password" required minLength={8} autoComplete="new-password" value={signup.password}
+                onChange={(e) => setSignup({ ...signup, password: e.target.value })} />
+              <label htmlFor="su-confirm">Confirmer le mot de passe</label>
+              <input id="su-confirm" type="password" required minLength={8} autoComplete="new-password" value={signup.confirm}
+                onChange={(e) => setSignup({ ...signup, confirm: e.target.value })} />
+              <button type="submit" className="login__role" disabled={busy || !online}>
+                {busy && <Loader2 size={18} className="login__spin" />} Envoyer la demande
+              </button>
+            </form>
+          )}
+
+          {notice && <p className="login__notice" role="status">{notice}</p>}
 
           {!online && (
             <p className="login__error" role="status"><WifiOff size={15} /> {t('login.offline_banner')}</p>

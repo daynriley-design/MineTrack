@@ -21,9 +21,9 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
+  // Demande de compte : creee « en attente », aucune session ouverte.
   const register = async (userData) => {
     const res = await authAPI.register(userData);
-    setUser(res.data);
     return res.data;
   };
 

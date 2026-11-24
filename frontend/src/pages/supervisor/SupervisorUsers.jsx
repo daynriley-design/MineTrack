@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, UserPlus, Trash2, Loader2 } from 'lucide-react';
+import { Search, UserPlus, Trash2, Loader2, Check } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -40,9 +40,25 @@ export default function SupervisorUsers() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => [u.name, u.email, ROLE_LABELS[u.role] || u.role].some((v) => String(v || '').toLowerCase().includes(q)));
+    const list = q
+      ? users.filter((u) => [u.name, u.email, ROLE_LABELS[u.role] || u.role].some((v) => String(v || '').toLowerCase().includes(q)))
+      : users;
+    // Demandes en attente en tete de liste.
+    return [...list].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
   }, [users, search]);
+
+  const pendingCount = users.filter((u) => u.status === 'pending').length;
+  const canApprove = (u) => isAdmin || SUPERVISOR_CREATABLE.includes(u.role);
+
+  const approveUser = async (u) => {
+    try {
+      await api.post(`/supervisor/users/${u.id}/approve`);
+      toast(`Compte de ${u.name} validé`, 'success');
+      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, status: 'active' } : x)));
+    } catch (err) {
+      toast(err?.response?.data?.detail || 'Validation impossible', 'error');
+    }
+  };
 
   const createUser = async (e) => {
     e.preventDefault();
@@ -74,7 +90,7 @@ export default function SupervisorUsers() {
 
   return (
     <div>
-      <PageHero title="Utilisateurs" subtitle="comptes et rôles" />
+      <PageHero title="Utilisateurs" subtitle={pendingCount ? `${pendingCount} demande(s) à valider` : 'comptes et rôles'} />
       <div className="mt-body mt-body--wide mt-form">
         <section className="mt-card">
           <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
@@ -93,9 +109,16 @@ export default function SupervisorUsers() {
                     <strong>{u.name}</strong>
                     <span>{u.email}</span>
                   </div>
+                  {u.status === 'pending' && <span className="mt-pill mt-pill--ore">En attente</span>}
                   <span className="mt-pill mt-pill--soft-gray">{ROLE_LABELS[u.role] || u.role}</span>
+                  {u.status === 'pending' && canApprove(u) && (
+                    <button type="button" onClick={() => approveUser(u)} title="Valider le compte" aria-label={`Valider ${u.name}`}
+                      className="mt-round" style={{ width: 36, height: 36, color: '#047857' }}>
+                      <Check size={17} />
+                    </button>
+                  )}
                   {canDelete(u) && (
-                    <button type="button" onClick={() => deleteUser(u)} title="Supprimer le compte" aria-label={`Supprimer ${u.name}`}
+                    <button type="button" onClick={() => deleteUser(u)} title={u.status === 'pending' ? 'Refuser la demande' : 'Supprimer le compte'} aria-label={`Supprimer ${u.name}`}
                       className="mt-round" style={{ width: 36, height: 36, color: 'var(--color-ruby)' }}>
                       <Trash2 size={16} />
                     </button>

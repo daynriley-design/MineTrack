@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import {
   House, Settings, MapPin, Activity, Drill, Zap, Factory,
   Truck, Users, ShieldAlert, FlaskConical, Wrench, DollarSign,
-  FileBarChart2, Pickaxe, Eye, Package, Headset, ClipboardList,
+  FileBarChart2, Pickaxe, Eye, Package, Headset, ClipboardList, UserCog,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AppShell from './AppShell';
@@ -28,6 +28,7 @@ export default function Layout() {
   const links = [
     { section: t('nav.main'), to: '/admin/operations', label: t('nav.setup'), icon: Settings },
     { to: '/admin/dashboard', label: t('nav.dashboard'), icon: House },
+    { to: '/supervisor/users', label: 'Utilisateurs', icon: UserCog },
     { section: t('nav.operations'), to: '/admin/pegs', label: t('nav.pegs'), icon: MapPin },
     { to: '/admin/work-progress', label: t('nav.progress'), icon: Activity },
     { to: '/admin/drilling', label: t('nav.drilling'), icon: Drill },

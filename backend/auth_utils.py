@@ -20,7 +20,7 @@ def _account_still_valid(claims: dict) -> bool:
     import database  # import local : evite un cycle au chargement
     try:
         row = database.sync_fetchone(
-            "SELECT 1 FROM users WHERE email=? AND role=? LIMIT 1",
+            "SELECT 1 FROM users WHERE email=? AND role=? AND COALESCE(status, 'active')='active' LIMIT 1",
             (claims.get("email"), claims.get("role")),
         )
         return row is not None

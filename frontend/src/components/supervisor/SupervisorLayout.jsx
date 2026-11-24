@@ -1,19 +1,29 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Eye, House, AlertTriangle, Map, ShieldCheck, FileText, ClipboardList,
   CircleDollarSign, Package, Users, User, ClipboardPlus,
 } from 'lucide-react';
-import { supervisorAPI } from '../../api';
+import api, { supervisorAPI } from '../../api';
 import AppShell from '../AppShell';
 
 export default function SupervisorLayout() {
   const [alertCount, setAlertCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const { pathname } = useLocation();
 
   useEffect(() => {
     supervisorAPI.alerts()
       .then(({ data }) => setAlertCount((data?.incidents?.length || 0) + (data?.pannes?.length || 0)))
       .catch(() => {});
   }, []);
+
+  // Demandes de compte a valider (recalcule a chaque changement de page).
+  useEffect(() => {
+    api.get('/supervisor/users')
+      .then(({ data }) => setPendingCount((Array.isArray(data) ? data : []).filter((u) => u.status === 'pending').length))
+      .catch(() => {});
+  }, [pathname]);
 
   const links = [
     { to: '/supervisor/dashboard', label: 'Accueil', icon: House },
@@ -24,7 +34,7 @@ export default function SupervisorLayout() {
     { to: '/supervisor/shift-reports', label: 'Rapports de shift', icon: ClipboardList },
     { to: '/supervisor/erp', label: 'ERP / Finances', icon: CircleDollarSign },
     { to: '/supervisor/stocks', label: 'Gestion stocks', icon: Package },
-    { to: '/supervisor/users', label: 'Utilisateurs', icon: Users },
+    { to: '/supervisor/users', label: 'Utilisateurs', icon: Users, count: pendingCount },
     { to: '/supervisor/profile', label: 'Profil', icon: User },
   ];
 
