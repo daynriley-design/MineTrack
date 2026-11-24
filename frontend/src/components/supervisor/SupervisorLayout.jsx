@@ -35,7 +35,7 @@ export default function SupervisorLayout() {
       links={links}
       dock={[links[0], links[2], links[4]]}
       fab={{ label: 'Nouveau rapport de shift', icon: ClipboardPlus, to: '/supervisor/shift-reports' }}
-      flushPaths={['/supervisor/dashboard']}
+      flushPaths={['/supervisor/dashboard', '/supervisor/reports']}
     />
   );
 }

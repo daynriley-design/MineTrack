@@ -4,49 +4,67 @@ import { ChevronLeft, ChevronRight, Sun, Moon, Layers, FileText, AlertTriangle, 
 import PageHero from '../../components/PageHero';
 import api from '../../api';
 
+// Rapport de shift d'un site : page de garde + table des matieres + un
+// tableau par rapport recu (cf. utils/reportPdf.js).
 async function exportReportsPDF({ siteName, day, shift, reports, reportDefs, shiftLabel, notSubmittedLabel }) {
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ]);
-  const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;padding:15mm;background:#fff;color:#222;font-family:Helvetica,Arial,sans-serif;';
-  const rows = reportDefs.map((r) => {
-    const found = reports.find((x) => x.report_type === r.key);
-    const body = found ? formatPayload(found.payload).replace(/</g, '&lt;') : `<em>${notSubmittedLabel}</em>`;
-    return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #ddd;">
-      <h3 style="margin:0 0 4px;font-size:13px;color:#003366;">${r.label}</h3>
-      <pre style="margin:0;white-space:pre-wrap;font-size:11px;font-family:ui-monospace,monospace;">${body}</pre>
-    </div>`;
-  }).join('');
-  container.innerHTML = `
-    <div style="border-bottom:3px solid #003366;padding-bottom:10px;margin-bottom:16px;">
-      <h1 style="margin:0;font-size:20px;color:#003366;">${siteName}</h1>
-      <p style="margin:4px 0 0;font-size:12px;color:#555;">${shiftLabel} — ${day}</p>
-    </div>
-    ${rows}
-  `;
-  document.body.appendChild(container);
-  try {
-    const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const imgW = pageW;
-    const imgH = (canvas.height * pageW) / canvas.width;
-    let y = 0;
-    while (y < imgH) {
-      pdf.addImage(imgData, 'PNG', 0, -y, imgW, imgH);
-      y += pageH;
-      if (y < imgH) pdf.addPage();
-    }
-    pdf.save(`minetrack_${siteName}_${shift}_${day}.pdf`);
-  } finally {
-    document.body.removeChild(container);
-  }
-}
+  const { generateReport, payloadRows } = await import('../../utils/reportPdf');
+  const dateFr = new Date(`${day}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const received = reportDefs.filter((r) => reports.some((x) => x.report_type === r.key));
+  const missing = reportDefs.filter((r) => !reports.some((x) => x.report_type === r.key));
 
+  await generateReport({
+    fileName: `minetrack_${siteName}_${shift}_${day}.pdf`,
+    period: dateFr,
+    title: ['Rapport', 'de shift'],
+    kind: `Journalier / ${shiftLabel}`,
+    preparedFor: ['Reliant Congo — Management', `Site : ${siteName}`, `${shiftLabel} du ${dateFr}`],
+    preparedBy: 'MineTrack',
+    sections: [
+      {
+        title: 'Informations générales',
+        blocks: [
+          { type: 'p', text: `Ce document regroupe les rapports de shift saisis pour le site ${siteName}, ${shiftLabel.toLowerCase()} du ${dateFr}. ${received.length} rapport(s) sur ${reportDefs.length} ont été transmis.` },
+          {
+            type: 'table', caption: 'Identification du shift', widths: [1, 2],
+            head: ['Élément', 'Valeur'],
+            rows: [
+              ['Site', siteName],
+              ['Date', dateFr],
+              ['Shift', shiftLabel],
+              ['Rapports reçus', `${received.length} / ${reportDefs.length}`],
+              ['Édité le', new Date().toLocaleString('fr-FR')],
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Rapports reçus',
+        blocks: received.length
+          ? received.map((r) => {
+            const found = reports.find((x) => x.report_type === r.key);
+            return {
+              type: 'sub', title: r.label,
+              blocks: [{ type: 'table', caption: `${r.label} — ${siteName}, ${shiftLabel.toLowerCase()}`, widths: [1, 2], head: ['Champ', 'Valeur'], rows: payloadRows(found.payload) }],
+            };
+          })
+          : [{ type: 'p', text: 'Aucun rapport n\'a été transmis pour ce shift.' }],
+      },
+      {
+        title: 'Rapports manquants',
+        blocks: missing.length
+          ? [{ type: 'p', text: `Les rapports suivants n'ont pas été transmis (${notSubmittedLabel.toLowerCase()}) :` }, { type: 'list', items: missing.map((r) => r.label) }]
+          : [{ type: 'p', text: 'Tous les rapports attendus ont été transmis.' }],
+      },
+      {
+        title: 'Validation',
+        blocks: [
+          { type: 'p', text: 'Le présent rapport est validé par les responsables ci-dessous.' },
+          { type: 'signatures', roles: ['Shift boss / Superviseur', 'Mine captain'] },
+        ],
+      },
+    ],
+  });
+}
 // Styles propres a la page ; cartes, champs et boutons viennent de index.css (.mt-*).
 const CSS = `
 .mgt__back{display:inline-flex;align-items:center;gap:.35rem;margin:.25rem .2rem 0;background:none;border:0;
